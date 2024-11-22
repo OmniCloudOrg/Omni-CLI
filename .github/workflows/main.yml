@@ -41,8 +41,8 @@ jobs:
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
-        env:
-          TOKEN: ${{ secrets.TOKEN }}
+        with:
+          token: ${{ secrets.TOKEN }}
         with:
           tag_name: v${{ needs.check-version.outputs.version }}
           release_name: Release v${{ needs.check-version.outputs.version }}

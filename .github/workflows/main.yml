@@ -91,11 +91,21 @@ jobs:
       - name: Generate SHA256
         shell: bash
         run: |
-          cd target/release
+          binary_path="target/release/omni"
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            sha256sum omni.exe > omni.exe.sha256
+            binary_path="target/release/omni.exe"
+          fi
+          
+          if [ ! -f "$binary_path" ]; then
+            echo "Binary not found at $binary_path"
+            ls -la target/release/
+            exit 1
+          fi
+          
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            sha256sum "$binary_path" > "$binary_path.sha256"
           else
-            shasum -a 256 omni > omni.sha256
+            shasum -a 256 "$binary_path" > "$binary_path.sha256"
           fi
 
       - name: Upload Binary

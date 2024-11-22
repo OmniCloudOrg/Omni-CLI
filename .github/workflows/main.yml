@@ -42,7 +42,7 @@ jobs:
         id: create_release
         uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          TOKEN: ${{ secrets.TOKEN }}
         with:
           tag_name: v${{ needs.check-version.outputs.version }}
           release_name: Release v${{ needs.check-version.outputs.version }}
@@ -57,13 +57,16 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         include:
           - os: ubuntu-latest
-            artifact_name: linux
+            target: x86_64-unknown-linux-gnu
+            bin_path: target/release/app
             asset_name: app-linux
           - os: windows-latest
-            artifact_name: windows
+            target: x86_64-pc-windows-msvc
+            bin_path: target/release/app.exe
             asset_name: app-windows.exe
           - os: macos-latest
-            artifact_name: macos
+            target: x86_64-apple-darwin
+            bin_path: target/release/app
             asset_name: app-macos
 
     runs-on: ${{ matrix.os }}
@@ -75,20 +78,21 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
+          target: ${{ matrix.target }}
           
       - name: Build
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --release
+          args: --release --target ${{ matrix.target }}
 
       - name: Generate SHA256
         shell: bash
         run: |
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            sha256sum target/release/${{ matrix.asset_name }} > target/release/${{ matrix.asset_name }}.sha256
+            sha256sum ${{ matrix.bin_path }} > ${{ matrix.bin_path }}.sha256
           else
-            shasum -a 256 target/release/${{ matrix.asset_name }} > target/release/${{ matrix.asset_name }}.sha256
+            shasum -a 256 ${{ matrix.bin_path }} > ${{ matrix.bin_path }}.sha256
           fi
 
       - name: Upload Binary
@@ -97,7 +101,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: target/release/${{ matrix.asset_name }}
+          asset_path: ${{ matrix.bin_path }}
           asset_name: ${{ matrix.asset_name }}
           asset_content_type: application/octet-stream
 
@@ -107,6 +111,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: target/release/${{ matrix.asset_name }}.sha256
+          asset_path: ${{ matrix.bin_path }}.sha256
           asset_name: ${{ matrix.asset_name }}.sha256
           asset_content_type: text/plain

@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+      
+      - name: Check if Cargo.toml version changed
+        id: check
+        run: |
+          CURRENT_VERSION=$(grep -m1 version Cargo.toml | cut -d '"' -f2)
+          git checkout HEAD^1
+          PREVIOUS_VERSION=$(grep -m1 version Cargo.toml | cut -d '"' -f2)
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
+  create-release:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ needs.check-version.outputs.version }}
+          release_name: Release v${{ needs.check-version.outputs.version }}
+          draft: false
+          prerelease: false
+
+  build-release:
+    needs: [check-version, create-release]
+    if: needs.check-version.outputs.should_release == 'true'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: linux
+            asset_name: app-linux
+          - os: windows-latest
+            artifact_name: windows
+            asset_name: app-windows.exe
+          - os: macos-latest
+            artifact_name: macos
+            asset_name: app-macos
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+
+      - name: Generate SHA256
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            sha256sum target/release/${{ matrix.asset_name }} > target/release/${{ matrix.asset_name }}.sha256
+          else
+            shasum -a 256 target/release/${{ matrix.asset_name }} > target/release/${{ matrix.asset_name }}.sha256
+          fi
+
+      - name: Upload Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: target/release/${{ matrix.asset_name }}
+          asset_name: ${{ matrix.asset_name }}
+          asset_content_type: application/octet-stream
+
+      - name: Upload SHA256
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: target/release/${{ matrix.asset_name }}.sha256
+          asset_name: ${{ matrix.asset_name }}.sha256
+          asset_content_type: text/plain

@@ -60,15 +60,15 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            bin_path: target/release/omni
+            bin_path: target/x86_64-unknown-linux-gnu/release/omni
             asset_name: omni-linux
-          - os: windows-latest
+          - os: windows-latest 
             target: x86_64-pc-windows-msvc
-            bin_path: target/release/omni.exe
+            bin_path: target/x86_64-pc-windows-msvc/release/omni.exe
             asset_name: omni-windows.exe
           - os: macos-latest
             target: x86_64-apple-darwin
-            bin_path: target/release/omni
+            bin_path: target/x86_64-apple-darwin/release/omni
             asset_name: omni-macos
 
     runs-on: ${{ matrix.os }}
@@ -91,14 +91,15 @@ jobs:
       - name: Generate SHA256
         shell: bash
         run: |
-          binary_path="target/release/omni"
+          binary_path="target/${{ matrix.target }}/release/omni"
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            binary_path="target/release/omni.exe"
+            binary_path="target/${{ matrix.target }}/release/omni.exe"
           fi
           
           if [ ! -f "$binary_path" ]; then
             echo "Binary not found at $binary_path"
-            ls -la target/release/
+            ls -la target/
+            ls -la target/${{ matrix.target }}/release/
             exit 1
           fi
           

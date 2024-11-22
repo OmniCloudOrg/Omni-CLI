@@ -60,16 +60,16 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            bin_path: target/release/app
-            asset_name: app-linux
+            bin_path: target/release/omni
+            asset_name: omni-linux
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            bin_path: target/release/app.exe
-            asset_name: app-windows.exe
+            bin_path: target/release/omni.exe
+            asset_name: omni-windows.exe
           - os: macos-latest
             target: x86_64-apple-darwin
-            bin_path: target/release/app
-            asset_name: app-macos
+            bin_path: target/release/omni
+            asset_name: omni-macos
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -93,9 +93,9 @@ jobs:
         run: |
           cd target/release
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            sha256sum app.exe > app.exe.sha256
+            sha256sum omni.exe > omni.exe.sha256
           else
-            shasum -a 256 app > app.sha256
+            shasum -a 256 omni > omni.sha256
           fi
 
       - name: Upload Binary

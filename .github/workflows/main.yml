@@ -91,10 +91,11 @@ jobs:
       - name: Generate SHA256
         shell: bash
         run: |
+          cd target/release
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            sha256sum ${{ matrix.bin_path }} > ${{ matrix.bin_path }}.sha256
+            sha256sum app.exe > app.exe.sha256
           else
-            shasum -a 256 ${{ matrix.bin_path }} > ${{ matrix.bin_path }}.sha256
+            shasum -a 256 app > app.sha256
           fi
 
       - name: Upload Binary

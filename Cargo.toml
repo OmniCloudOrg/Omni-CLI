@@ -11,9 +11,9 @@ console = "0.15.8"
 dialoguer = "0.11.0"
 flate2 = "1.0.35"
 indicatif = "0.17.9"
-reqwest = { version = "0.12.9", features = ["multipart"] }
 serde_yaml = "0.9.34"
 spinners = "4.1.1"
 tabled = "0.17.0"
 tar = "0.4.43"
+reqwest = { version = "0.12.9", features = ["multipart"] }
 tokio = { version = "1.41.1", features = ["macros", "rt-multi-thread", "fs"] }

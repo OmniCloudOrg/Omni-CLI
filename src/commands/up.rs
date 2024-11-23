@@ -60,10 +60,6 @@ impl PremiumUI {
         fs::remove_file(&tarball_path).await
             .context("Failed to clean up tarball")?;
 
-        // Clean up tarball
-        fs::remove_file(&tarball_path).await
-            .context("Failed to clean up tarball")?;
-
         let steps = [
             ("Analyzing project", 20),
             ("Building containers", 40),
@@ -169,7 +165,7 @@ impl PremiumUI {
         let api_url = match environment {
             "Production" => "http://localhost:3030/upload",
             "Staging" => "https://staging-api.example.com/v1/deploy",
-            _ => "http://localhost:3030/upload",
+            _ => "http://localhost:3030/deploy",
         };
 
         let file_content = fs::read(tarball_path).await?;

@@ -3,7 +3,6 @@ use anyhow::Result;
 use console::style;
 use dialoguer::Confirm;
 use std::{thread, time::Duration};
-use serde_yaml;
 
 impl PremiumUI {
     pub async fn config_view(&self) -> Result<()> {

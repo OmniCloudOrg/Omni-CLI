@@ -8,7 +8,7 @@ use chrono::Local;
 impl PremiumUI {
     pub async fn logs_interactive(&self) -> Result<()> {
         let components = vec!["Web Frontend", "API Backend", "Database", "All Components"];
-        let component = Select::with_theme(&self.theme)
+        let _component = Select::with_theme(&self.theme)
             .with_prompt("Select component")
             .items(&components)
             .interact()?;

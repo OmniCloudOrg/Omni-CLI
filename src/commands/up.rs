@@ -5,14 +5,14 @@ use console::style;
 use dialoguer::{Confirm, Input, Select};
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use ignore::WalkBuilder;
+use pathdiff;
 use reqwest::multipart::{Form, Part};
 use std::{fs::File, path::Path};
 use std::{thread, time::Duration};
 use tabled::Table;
 use tar::Builder;
 use tokio::{fs, task};
-use ignore::WalkBuilder;
-use pathdiff;
 
 impl PremiumUI {
     pub async fn deploy_interactive(&self) -> Result<()> {
@@ -51,15 +51,19 @@ impl PremiumUI {
         println!("\n{}", style("🚀 Initializing deployment...").cyan().bold());
 
         // Create tarball
-        let tarball_path = self.create_tarball(&project_path).await
+        let tarball_path = self
+            .create_tarball(&project_path)
+            .await
             .context("Failed to create tarball")?;
 
         // Upload tarball
-        self.upload_tarball(&tarball_path, environments[env_selection]).await
+        self.upload_tarball(&tarball_path, environments[env_selection])
+            .await
             .context("Failed to upload tarball")?;
 
         // Clean up tarball
-        fs::remove_file(&tarball_path).await
+        fs::remove_file(&tarball_path)
+            .await
             .context("Failed to clean up tarball")?;
 
         let steps = [
@@ -117,8 +121,16 @@ impl PremiumUI {
         println!("Frontend: {}", style("https://app.example.com").green());
         println!("API:      {}", style("https://api.example.com").green());
         println!("Metrics:  {}", style("https://metrics.example.com").green());
-        println!("\n{}", style("✨ Deployment completed successfully!").green().bold());
-        println!("{}", style("Run 'omni status' to monitor your deployment.").dim());
+        println!(
+            "\n{}",
+            style("✨ Deployment completed successfully!")
+                .green()
+                .bold()
+        );
+        println!(
+            "{}",
+            style("Run 'omni status' to monitor your deployment.").dim()
+        );
         Ok(())
     }
 
@@ -127,7 +139,7 @@ impl PremiumUI {
         let project_path = fs::canonicalize(project_path)
             .await
             .context("Failed to resolve project path")?;
-        
+
         let project_name = project_path
             .file_name()
             .and_then(|name| name.to_str())
@@ -138,14 +150,14 @@ impl PremiumUI {
                     .and_then(|comp| comp.as_os_str().to_str())
                     .unwrap_or("project")
             });
-    
+
         let tar_gz_path = format!("{}.tar.gz", project_name);
-    
+
         // Create a file for the tarball
         let tar_gz = File::create(&tar_gz_path)?;
         let enc = GzEncoder::new(tar_gz, Compression::default());
         let builder = std::sync::Arc::new(std::sync::Mutex::new(Builder::new(enc)));
-    
+
         // Count total files first
         let mut total_files = 0;
         let walker = WalkBuilder::new(&project_path)
@@ -154,16 +166,31 @@ impl PremiumUI {
             .git_global(true)
             .git_exclude(true)
             .build();
-    
+
         for entry in walker.filter_map(|e| e.ok()) {
             if entry.file_type().map_or(false, |ft| ft.is_file()) {
                 total_files += 1;
             }
         }
-    
+        if total_files > 5000 {
+            // let should_continue = Input::with_theme(&self.theme)
+            //     .with_prompt("Enter project path")
+            //     .interact()?;
+            let confirm = dialoguer::Confirm::with_theme(&self.theme)
+                .default(false)
+                .with_prompt("Your project contains more than 5000 files. Are you sure you would like to deploy it? This make take significant amounts of time and space on your machine")
+                .report(false)
+                .show_default(true)
+                .interact()?;
+            if !confirm {
+                println!("{}", style("Canceling upload operation").bold().blue());
+                std::process::exit(0)
+            }
+        }
+
         let pb = self.create_progress_bar(total_files, "Creating tarball");
         pb.set_message("Initializing tarball creation");
-    
+
         // Process files
         let mut files_processed = 0;
         let walker = WalkBuilder::new(&project_path)
@@ -172,26 +199,26 @@ impl PremiumUI {
             .git_global(true)
             .git_exclude(true)
             .build();
-    
+
         for entry in walker.filter_map(|e| e.ok()) {
             if let Some(file_type) = entry.file_type() {
                 let entry_path = entry.path().to_path_buf();
-                
+
                 // Convert the entry path to a relative path using path difference
                 let relative_path = pathdiff::diff_paths(&entry_path, &project_path)
                     .ok_or_else(|| anyhow::anyhow!("Failed to compute relative path"))?;
-                
+
                 // Skip root directory
                 if relative_path.as_os_str().is_empty() {
                     continue;
                 }
-                
+
                 if file_type.is_dir() {
                     pb.set_message(format!("Adding directory: {}", relative_path.display()));
-                    
+
                     let builder = std::sync::Arc::clone(&builder);
                     let relative_path = relative_path.clone();
-                    
+
                     task::spawn_blocking(move || -> Result<()> {
                         let mut builder = builder.lock().unwrap();
                         let mut header = tar::Header::new_ustar();
@@ -200,42 +227,49 @@ impl PremiumUI {
                         header.set_size(0);
                         builder.append_data(&mut header, relative_path, &[][..])?;
                         Ok(())
-                    }).await??;
+                    })
+                    .await??;
                 } else if file_type.is_file() {
                     let file_contents = fs::read(&entry_path)
                         .await
                         .with_context(|| format!("Failed to read file: {:?}", entry_path))?;
-                    
+
                     let builder = std::sync::Arc::clone(&builder);
                     let relative_path_clone = relative_path.clone();
-                    
+
                     task::spawn_blocking(move || -> Result<()> {
                         let mut builder = builder.lock().unwrap();
                         let mut header = tar::Header::new_ustar();
                         header.set_size(file_contents.len() as u64);
                         header.set_mode(0o644);
-                        builder.append_data(&mut header, relative_path_clone, &file_contents[..])?;
+                        builder.append_data(
+                            &mut header,
+                            relative_path_clone,
+                            &file_contents[..],
+                        )?;
                         Ok(())
-                    }).await??;
-                    
+                    })
+                    .await??;
+
                     files_processed += 1;
                     pb.set_position(files_processed);
                     pb.set_message(format!("Adding file: {}", relative_path.display()));
                 }
-                
+
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
         }
-    
+
         // Finalize the tarball
         pb.set_message("Finalizing tarball");
-        
+
         task::spawn_blocking(move || -> Result<()> {
             let mut builder = builder.lock().unwrap();
             builder.finish()?;
             Ok(())
-        }).await??;
-    
+        })
+        .await??;
+
         pb.finish_with_message("Tarball created successfully ✓");
         Ok(tar_gz_path)
     }
@@ -247,39 +281,46 @@ impl PremiumUI {
             "Staging" => "https://staging-api.example.com/v1/deploy",
             _ => "http://localhost:3030/deploy",
         };
-    
+
         let file_content = fs::read(tarball_path).await?;
-        
+
         // Create the part with the correct field name "media" to match server expectations
         let part = Part::bytes(file_content)
-            .file_name(Path::new(tarball_path).file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("app.tar.gz")
-                .to_string())
+            .file_name(
+                Path::new(tarball_path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("app.tar.gz")
+                    .to_string(),
+            )
             .mime_str("application/x-gzip")?;
-    
+
         // Use "media" as the field name to match the server's expected field
         let form = Form::new()
             .part("media", part)
             .text("environment", environment.to_string());
-    
+
         let pb = self.create_progress_bar(100, "Uploading project");
-        
+
         let response = client
             .post(api_url)
             //.bearer_auth(&self.config.api_token)
             .multipart(form)
             .send()
             .await?;
-    
+
         if !response.status().is_success() {
             pb.abandon_with_message("Upload failed!");
-            anyhow::bail!("Failed to upload tarball: {} - {}", 
+            anyhow::bail!(
+                "Failed to upload tarball: {} - {}",
                 response.status(),
-                response.text().await.unwrap_or_else(|_| "No error message".to_string())
+                response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "No error message".to_string())
             );
         }
-    
+
         pb.finish_with_message("Upload completed successfully ✓");
         Ok(())
     }

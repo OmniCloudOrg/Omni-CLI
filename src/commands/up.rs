@@ -247,30 +247,39 @@ impl PremiumUI {
             "Staging" => "https://staging-api.example.com/v1/deploy",
             _ => "http://localhost:3030/deploy",
         };
-
+    
         let file_content = fs::read(tarball_path).await?;
+        
+        // Create the part with the correct field name "media" to match server expectations
         let part = Part::bytes(file_content)
-            .file_name(tarball_path.to_string())
-            .mime_str("application/gzip")?;
-
+            .file_name(Path::new(tarball_path).file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("app.tar.gz")
+                .to_string())
+            .mime_str("application/x-gzip")?;
+    
+        // Use "media" as the field name to match the server's expected field
         let form = Form::new()
-            .part("file", part)
+            .part("media", part)
             .text("environment", environment.to_string());
-
+    
         let pb = self.create_progress_bar(100, "Uploading project");
         
         let response = client
             .post(api_url)
-//            .bearer_auth(&self.config.api_token)
+            //.bearer_auth(&self.config.api_token)
             .multipart(form)
             .send()
             .await?;
-
+    
         if !response.status().is_success() {
             pb.abandon_with_message("Upload failed!");
-            anyhow::bail!("Failed to upload tarball: {}", response.status());
+            anyhow::bail!("Failed to upload tarball: {} - {}", 
+                response.status(),
+                response.text().await.unwrap_or_else(|_| "No error message".to_string())
+            );
         }
-
+    
         pb.finish_with_message("Upload completed successfully ✓");
         Ok(())
     }

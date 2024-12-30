@@ -11,7 +11,7 @@ impl PremiumUI {
         spinner.stop();
 
         println!("\n{}", style("📝 Application Configuration").cyan().bold());
-        
+
         // Simulate YAML config
         let config = r#"
 environment: production
@@ -38,8 +38,11 @@ components:
 
     pub async fn config_edit(&self) -> Result<()> {
         println!("\n{}", style("✏️  Edit Configuration").cyan().bold());
-        println!("{}", style("Opening configuration in your default editor...").dim());
-        
+        println!(
+            "{}",
+            style("Opening configuration in your default editor...").dim()
+        );
+
         // Simulate editor opening
         thread::sleep(Duration::from_secs(2));
         println!("{}", style("Configuration updated successfully!").green());

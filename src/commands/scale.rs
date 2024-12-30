@@ -19,7 +19,7 @@ impl PremiumUI {
             .validate_with(|input: &String| -> Result<(), &str> {
                 match input.parse::<u32>() {
                     Ok(n) if n > 0 && n <= 10 => Ok(()),
-                    _ => Err("Please enter a number between 1 and 10")
+                    _ => Err("Please enter a number between 1 and 10"),
                 }
             })
             .interact_text()?
@@ -36,7 +36,8 @@ impl PremiumUI {
             replicas: format!("{}/{}", replicas, replicas),
             cpu: format!("{}m", replicas * 150),
             memory: format!("{}Mi", replicas * 256),
-        }]).to_string();
+        }])
+        .to_string();
         println!("{}", status);
 
         Ok(())

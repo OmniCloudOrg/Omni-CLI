@@ -8,12 +8,17 @@ use flate2::Compression;
 use ignore::WalkBuilder;
 use pathdiff;
 use reqwest::multipart::{Form, Part};
+use serde::Deserialize;
+use serde::Serialize;
 use std::{fs::File, path::Path};
 use std::{thread, time::Duration};
 use tabled::Table;
 use tar::Builder;
 use tokio::{fs, task};
-
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeployPermissions {
+    max_file_count: u64,
+}
 impl PremiumUI {
     pub async fn deploy_interactive(&self) -> Result<()> {
         // Get project path
@@ -172,13 +177,54 @@ impl PremiumUI {
                 total_files += 1;
             }
         }
+        let client = reqwest::Client::new();
+        let max_file_count = client
+            .post("http://localhost:3030/deploy/permissions")
+            .send()
+            .await;
+        match max_file_count {
+            Ok(response) => match response.text().await {
+                Ok(json_str) => {
+                    let json: Result<DeployPermissions, _> = serde_json::from_str(&json_str);
+                    let permissions = json.unwrap_or_else(|_| {
+                        println!("{}", style(""));
+                        std::process::exit(0)
+                    });
+                    if total_files > permissions.max_file_count {
+                        let too_many_files: i64 =
+                            total_files as i64 - permissions.max_file_count as i64;
+                        println!("{}",style(format!("The server had denied your deployment request. Your project contains {} too many files. ({}/{})",too_many_files,total_files,permissions.max_file_count)).red());
+                        std::process::exit(0);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("{}", style(format!("Deployment failed: {e}",)).red().bold());
+                    std::process::exit(0);
+                }
+            },
+            Err(e) => {
+                eprintln!("{}", style(format!("Deployment failed: {e}",)).red().bold());
+                std::process::exit(0);
+            }
+        }
         if total_files > 5000 {
             // let should_continue = Input::with_theme(&self.theme)
             //     .with_prompt("Enter project path")
             //     .interact()?;
+            let path_str = format!("{}", project_path.display());
+            let current_path_str = style(format!(
+                "You are about to upload the entire of {}",
+                path_str
+            ))
+            .yellow()
+            .bold()
+            .underlined();
+            let prompt = format!("Your project contains more than 5000 files.
+Are you sure you would like to deploy it? This make take significant amounts of time and space on your machine.\n{}",
+                current_path_str);
             let confirm = dialoguer::Confirm::with_theme(&self.theme)
                 .default(false)
-                .with_prompt("Your project contains more than 5000 files. Are you sure you would like to deploy it? This make take significant amounts of time and space on your machine")
+                .with_prompt(prompt)
                 .report(false)
                 .show_default(true)
                 .interact()?;

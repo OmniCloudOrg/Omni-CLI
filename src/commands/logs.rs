@@ -1,9 +1,9 @@
 use crate::ui::PremiumUI;
 use anyhow::Result;
+use chrono::Local;
 use console::style;
 use dialoguer::Select;
 use std::{thread, time::Duration};
-use chrono::Local;
 
 impl PremiumUI {
     pub async fn logs_interactive(&self) -> Result<()> {
@@ -14,10 +14,10 @@ impl PremiumUI {
             .interact()?;
 
         println!("\n{}", style("📋 Application Logs").cyan().bold());
-        
+
         let mut spinner = self.create_spinner("Fetching logs...");
         thread::sleep(Duration::from_secs(1));
-        
+
         // Simulate log entries
         let logs = vec![
             format!("[{}] INFO: Service health check passed", Local::now()),
@@ -27,7 +27,7 @@ impl PremiumUI {
         ];
 
         spinner.stop();
-        
+
         for log in logs {
             println!("{}", log);
         }

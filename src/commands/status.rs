@@ -1,5 +1,5 @@
-use crate::ui::PremiumUI;
 use crate::models::ComponentStatus;
+use crate::ui::PremiumUI;
 use anyhow::Result;
 use console::style;
 use std::{thread, time::Duration};
@@ -9,7 +9,7 @@ impl PremiumUI {
     pub async fn status_interactive(&self) -> Result<()> {
         let mut spinner = self.create_spinner("Fetching application status...");
         thread::sleep(Duration::from_secs(1));
-        
+
         let status = vec![
             ComponentStatus {
                 name: "Web Frontend".into(),
@@ -35,10 +35,10 @@ impl PremiumUI {
         ];
 
         spinner.stop();
-        
+
         println!("\n{}", style("📊 System Status").cyan().bold());
         println!("{}", Table::new(status).to_string());
-        
+
         println!("\n{}", style("🔍 System Metrics").cyan().bold());
         println!("Uptime:        {}", style("15d 7h 23m").green());
         println!("Response Time: {}", style("145ms").green());

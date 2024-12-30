@@ -18,12 +18,12 @@ impl PremiumUI {
             .interact()?;
 
         println!("\n{}", style("📦 Pushing image...").cyan().bold());
-        
+
         let pb = self.create_progress_bar(100, "Preparing image");
         for i in 0..100 {
             pb.inc(1);
             thread::sleep(Duration::from_millis(50));
-            
+
             match i {
                 20 => pb.set_message("Building layers..."),
                 50 => pb.set_message("Optimizing image..."),

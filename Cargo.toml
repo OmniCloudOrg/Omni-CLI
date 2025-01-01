@@ -1,6 +1,6 @@
 [package]
 name = "omni"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 
 [dependencies]
@@ -19,3 +19,8 @@ reqwest = { version = "0.12.9", features = ["multipart"] }
 tokio = { version = "1.41.1", features = ["macros", "rt-multi-thread", "fs"] }
 uuid = { version = "1.11.0", features = ["v4"] }
 tempfile = "3.14.0"
+walkdir = "2.5.0"
+ignore = "0.4.23"
+pathdiff = "0.2.3"
+serde_json = "1.0.134"
+serde = { version = "1.0.217", features = ["derive"] }

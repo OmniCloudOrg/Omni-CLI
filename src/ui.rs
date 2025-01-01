@@ -1,8 +1,8 @@
+use anyhow::Result;
 use console::{style, Term};
+use dialoguer::theme::ColorfulTheme;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use spinners::{Spinner, Spinners};
-use dialoguer::theme::ColorfulTheme;
-use anyhow::Result;
 
 const LOGO: &str = r#"
    ____                  _ ______                    
@@ -31,7 +31,12 @@ impl PremiumUI {
     pub fn display_welcome(&self) -> Result<()> {
         self.term.clear_screen()?;
         println!("{}", style(LOGO).cyan().bold());
-        println!("{}", style("Welcome to Omniforge - Modern Development Environment").cyan().bold());
+        println!(
+            "{}",
+            style("Welcome to Omniforge - Modern Development Environment")
+                .cyan()
+                .bold()
+        );
         println!("{}\n", style("Version 1.0.0").dim());
         Ok(())
     }

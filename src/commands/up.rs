@@ -59,7 +59,6 @@ impl PremiumUI {
         }
 
         println!("\n{}", style("🚀 Initializing deployment...").cyan().bold());
-        println!("proj path {}",project_path.to_string_lossy());
         // Create tarball
         println!("{}", style("🗜️  Creating tarball...").cyan().bold());
         let tarball_path = self
@@ -75,13 +74,11 @@ impl PremiumUI {
         let project_path = Path::new(&project_path)
             .canonicalize()
             .expect("Failed to canonicalize path");
-        println!("{}", project_path.display());
         let project_name: String = project_path
             .file_name()
             .and_then(|s| s.to_str())
             .map(String::from)
             .expect("Unable to determine folder name"); // Upload tarball
-        println!("the current project name is {}",project_name);
         self.upload_tarball(
             &tarball_path,
             environments[env_selection],
@@ -207,7 +204,6 @@ impl PremiumUI {
         }
         let max_file_count =
             reqwest::get("http://100.120.68.15:8000/api/v1/deploy/permissions").await;
-        println!("reading max file count");
         match max_file_count {
             Ok(response) => match response.text().await {
                 Ok(json_str) => {
@@ -363,8 +359,7 @@ Are you sure you would like to deploy it? This make take significant amounts of 
             // "Staging" => "https://staging-api.example.com/v1/deploy".to_string(),
             _ => format!("http://100.120.68.15:8000/api/v1/apps/{name}/releases/{uuid_str}/upload"),
         };
-        println!("Project name: {name}");
-        println!("Uploading project with post request: {}", api_url);
+
         let file_content = fs::read(tarball_path).await?;
 
         // Create the part with the correct field name "media" to match server expectations

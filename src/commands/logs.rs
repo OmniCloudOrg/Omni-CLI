@@ -1,17 +1,16 @@
 use crate::ui::PremiumUI;
 use anyhow::Result;
 use console::style;
-use dialoguer::Select;
 use std::{thread, time::Duration};
 use chrono::Local;
 
 impl PremiumUI {
     pub async fn logs_interactive(&self) -> Result<()> {
-        let components = vec!["Web Frontend", "API Backend", "Database", "All Components"];
-        let component = Select::with_theme(&self.theme)
-            .with_prompt("Select component")
-            .items(&components)
-            .interact()?;
+        // let components = vec!["Web Frontend", "API Backend", "Database", "All Components"];
+        // let component = Select::with_theme(&self.theme)
+        //     .with_prompt("Select component")
+        //     .items(&components)
+        //     .interact()?;
 
         println!("\n{}", style("📋 Application Logs").cyan().bold());
         

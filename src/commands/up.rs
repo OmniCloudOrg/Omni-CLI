@@ -1,7 +1,6 @@
 use crate::models::ComponentStatus;
-use anyhow::anyhow;
-use tempfile::env::temp_dir;
 use crate::ui::PremiumUI;
+use anyhow::anyhow;
 use anyhow::{Context, Result};
 use console::style;
 use dialoguer::{Confirm, Input, Select};
@@ -12,10 +11,12 @@ use pathdiff;
 use reqwest::multipart::{Form, Part};
 use serde::Deserialize;
 use serde::Serialize;
+use std::path::PathBuf;
 use std::{fs::File, path::Path};
 use std::{thread, time::Duration};
 use tabled::Table;
 use tar::Builder;
+use tempfile::env::temp_dir;
 use tokio::{fs, task};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DeployPermissions {
@@ -28,6 +29,8 @@ impl PremiumUI {
             .with_prompt("Enter project path")
             .default(".".into())
             .interact_text()?;
+        let project_path = PathBuf::from(project_path);
+        let project_path = project_path.canonicalize().context("Failed to canonicalize project path")?;
 
         // Validate project path
         if !Path::new(&project_path).exists() {
@@ -56,18 +59,17 @@ impl PremiumUI {
         }
 
         println!("\n{}", style("🚀 Initializing deployment...").cyan().bold());
-
+        println!("proj path {}",project_path.to_string_lossy());
         // Create tarball
         println!("{}", style("🗜️  Creating tarball...").cyan().bold());
         let tarball_path = self
-            
-            .create_tarball(&project_path)
-            
+            .create_tarball(&project_path.to_string_lossy())
             .await
             .context("Failed to create tarball")?;
         println!("{}", style("🗜️  uploading").cyan().bold());
-        let path = std::env::current_dir()?;
+        let path = Path::new(&project_path);
         if !path.is_dir() {
+            print!("{}", style("Error: Not a directory").red());
             return Err(anyhow!("Invalid project path"));
         }
         let project_path = Path::new(&project_path)
@@ -79,6 +81,7 @@ impl PremiumUI {
             .and_then(|s| s.to_str())
             .map(String::from)
             .expect("Unable to determine folder name"); // Upload tarball
+        println!("the current project name is {}",project_name);
         self.upload_tarball(
             &tarball_path,
             environments[env_selection],
@@ -148,22 +151,14 @@ impl PremiumUI {
         println!("API:      {}", style("https://api.example.com").green());
         println!("Metrics:  {}", style("https://metrics.example.com").green());
         println!(
-            
             "\n{}",
-           
             style("✨ Deployment completed successfully!")
-                
                 .green()
-                
                 .bold()
-        
         );
         println!(
-            
             "{}",
-           
             style("Run 'omni status' to monitor your deployment.").dim()
-        
         );
         Ok(())
     }
@@ -173,7 +168,7 @@ impl PremiumUI {
         let project_path = fs::canonicalize(project_path)
             .await
             .context("Failed to resolve project path")?;
-
+        let absolute_path = project_path.clone();
         // Get the directory name - use the last component of the path
         let project_name = absolute_path
             .file_name()
@@ -184,15 +179,12 @@ impl PremiumUI {
                     .last()
                     .and_then(|comp| comp.as_os_str().to_str())
                     .unwrap_or("project")
-            });
+            })
+            .to_string();
 
         // Create tarball filename in temp directory
         let temp_dir = temp_dir();
-        let tar_gz_path = temp_dir.as_path().join(format!("{}.tar.gz", project_name));
-
-        // Create the tarball file
-
-        let tar_gz_path = format!("{}.tar.gz", project_name);
+        let tar_gz_path = temp_dir.join(format!("{}.tar.gz", project_name));
 
         // Create a file for the tarball
         let tar_gz = File::create(&tar_gz_path)?;
@@ -213,11 +205,9 @@ impl PremiumUI {
                 total_files += 1;
             }
         }
-        let client = reqwest::Client::new();
-        let max_file_count = client
-            .post("http://localhost:3030/deploy/permissions")
-            .send()
-            .await;
+        let max_file_count =
+            reqwest::get("http://100.120.68.15:8000/api/v1/deploy/permissions").await;
+        println!("reading max file count");
         match max_file_count {
             Ok(response) => match response.text().await {
                 Ok(json_str) => {
@@ -244,9 +234,6 @@ impl PremiumUI {
             }
         }
         if total_files > 5000 {
-            // let should_continue = Input::with_theme(&self.theme)
-            //     .with_prompt("Enter project path")
-            //     .interact()?;
             let path_str = format!("{}", project_path.display());
             let current_path_str = style(format!(
                 "You are about to upload the entire of {}",
@@ -353,19 +340,10 @@ Are you sure you would like to deploy it? This make take significant amounts of 
         .await??;
 
         pb.finish_with_message("Tarball created successfully ✓");
-        Ok(tar_gz_path)
-        let mut tar = Builder::new(enc); // Add the directory contents to the tarball
-        tar.append_dir_all(".", project_path)
-            .context("Failed to add directory contents to tarball")?;
 
-        // Finish creating the tarball
-        tar.into_inner()
-            .context("Failed to finish tarball creation")?
-            .finish()
-            .context("Failed to finish compression")?;
-
-        Ok(tar_gz_path.to_string_lossy().to_string())
+        Ok(tar_gz_path.to_string_lossy().into_owned())
     }
+
     async fn upload_tarball(
         &self,
         tarball_path: &str,
@@ -401,10 +379,9 @@ Are you sure you would like to deploy it? This make take significant amounts of 
 
         let pb = self.create_progress_bar(100, "Uploading project");
 
-
         let response = client
             .post(api_url)
-                        //.bearer_auth(&self.config.api_token)
+            //.bearer_auth(&self.config.api_token)
             .multipart(form)
             .send()
             .await?;
@@ -425,4 +402,3 @@ Are you sure you would like to deploy it? This make take significant amounts of 
         Ok(())
     }
 }
-

@@ -2,6 +2,7 @@ use crate::ui::PremiumUI;
 use anyhow::Result;
 use chrono::Local;
 use console::style;
+use dialoguer::Select;
 use std::{thread, time::Duration};
 
 impl PremiumUI {

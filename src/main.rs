@@ -15,8 +15,36 @@ async fn main() -> anyhow::Result<()> {
     let cli = Command::new("omni")
         .about(format!(
             "{}",
-            style("Modern Development Environment CLI").cyan().bold()
+            style("OmniOrchestrator - Self-Hosted Cloud Platform CLI").cyan().bold()
         ))
+        .subcommand(
+            Command::new("init")
+                .about(format!(
+                    "{}",
+                    style("Initialize cloud environment with OmniOrchestrator").green()
+                ))
+                .arg(
+                    Arg::new("force")
+                        .long("force")
+                        .help("Force re-initialization even if config exists")
+                        .required(false)
+                        .action(clap::ArgAction::SetTrue),
+                ),
+        )
+        .subcommand(
+            Command::new("hosts")
+                .about(format!(
+                    "{}",
+                    style("List configured SSH hosts").green()
+                )),
+        )
+        .subcommand(
+            Command::new("status")
+                .about(format!(
+                    "{}",
+                    style("Check OmniOrchestrator status").green()
+                )),
+        )
         .subcommand(
             Command::new("up")
                 .about(format!(
@@ -69,9 +97,15 @@ async fn main() -> anyhow::Result<()> {
             Command::new("logs")
                 .about(format!("{}", style("View application logs").green()))
                 .arg(
-                    Arg::new("component")
-                        .long("component")
-                        .help("Component to view logs for")
+                    Arg::new("host")
+                        .long("host")
+                        .help("Host to view logs from")
+                        .required(false),
+                )
+                .arg(
+                    Arg::new("service")
+                        .long("service")
+                        .help("Service to view logs for")
                         .required(false),
                 )
                 .arg(
@@ -82,7 +116,37 @@ async fn main() -> anyhow::Result<()> {
                 ),
         )
         .subcommand(
-            Command::new("status").about(format!("{}", style("Check application status").green())),
+            Command::new("service")
+                .about(format!("{}", style("Manage OmniOrchestrator services").green()))
+                .subcommand(
+                    Command::new("restart")
+                        .about("Restart a service")
+                        .arg(Arg::new("host").required(true))
+                        .arg(Arg::new("service").required(true)),
+                )
+                .subcommand(
+                    Command::new("stop")
+                        .about("Stop a service")
+                        .arg(Arg::new("host").required(true))
+                        .arg(Arg::new("service").required(true)),
+                )
+                .subcommand(
+                    Command::new("start")
+                        .about("Start a service")
+                        .arg(Arg::new("host").required(true))
+                        .arg(Arg::new("service").required(true)),
+                ),
+        )
+        .subcommand(
+            Command::new("backup")
+                .about(format!("{}", style("Manage backup operations").green()))
+                .subcommand(Command::new("now").about("Trigger an immediate backup"))
+                .subcommand(Command::new("list").about("List available backups"))
+                .subcommand(
+                    Command::new("restore")
+                        .about("Restore from a backup")
+                        .arg(Arg::new("id").required(true)),
+                ),
         )
         .subcommand(
             Command::new("rollback")
@@ -107,20 +171,72 @@ async fn main() -> anyhow::Result<()> {
         .get_matches();
 
     match cli.subcommand() {
+        // OmniOrchestrator commands
+        Some(("init", _)) => ui.init_environment().await?,
+        Some(("hosts", _)) => ui.list_ssh_hosts().await?,
+        Some(("status", _)) => ui.orchestrator_status().await?,
+        
+        // Application deployment commands
         Some(("up", _)) => ui.deploy_interactive().await?,
         Some(("push", _)) => ui.push_interactive().await?,
         Some(("scale", _)) => ui.scale_interactive().await?,
         Some(("logs", _)) => ui.logs_interactive().await?,
-        Some(("status", _)) => ui.status_interactive().await?,
         Some(("rollback", _)) => ui.rollback_interactive().await?,
+        
+        // Service management
+        Some(("service", subcommand)) => match subcommand.subcommand() {
+            Some(("restart", _)) => println!("{}", style("Service restart not yet implemented").yellow()),
+            Some(("stop", _)) => println!("{}", style("Service stop not yet implemented").yellow()),
+            Some(("start", _)) => println!("{}", style("Service start not yet implemented").yellow()),
+            _ => println!("{}", style("Use 'omni service --help' for available commands").yellow()),
+        },
+        
+        // Backup management
+        Some(("backup", subcommand)) => match subcommand.subcommand() {
+            Some(("now", _)) => println!("{}", style("Backup now not yet implemented").yellow()),
+            Some(("list", _)) => println!("{}", style("Backup list not yet implemented").yellow()),
+            Some(("restore", _)) => println!("{}", style("Backup restore not yet implemented").yellow()),
+            _ => println!("{}", style("Use 'omni backup --help' for available commands").yellow()),
+        },
+        
+        // Configuration management
         Some(("config", subcommand)) => match subcommand.subcommand() {
             Some(("view", _)) => ui.config_view().await?,
             Some(("edit", _)) => ui.config_edit().await?,
             Some(("reset", _)) => ui.config_reset().await?,
             _ => ui.config_view().await?,
         },
+        
+        // Help menu
         _ => {
-            println!("\n{}", style("AVAILABLE COMMANDS:").magenta().bold());
+            println!("\n{}", style("OMNI ORCHESTRATOR COMMANDS:").magenta().bold());
+            println!(
+                "  {} {}",
+                style("init").cyan(),
+                style("Initialize cloud environment").dim()
+            );
+            println!(
+                "  {} {}",
+                style("hosts").cyan(),
+                style("List configured SSH hosts").dim()
+            );
+            println!(
+                "  {} {}",
+                style("status").cyan(),
+                style("Check OmniOrchestrator status").dim()
+            );
+            println!(
+                "  {} {}",
+                style("service").cyan(),
+                style("Manage OmniOrchestrator services").dim()
+            );
+            println!(
+                "  {} {}",
+                style("backup").cyan(),
+                style("Manage backup operations").dim()
+            );
+            
+            println!("\n{}", style("APPLICATION COMMANDS:").magenta().bold());
             println!(
                 "  {} {}",
                 style("up").cyan(),
@@ -140,11 +256,6 @@ async fn main() -> anyhow::Result<()> {
                 "  {} {}",
                 style("logs").cyan(),
                 style("View application logs").dim()
-            );
-            println!(
-                "  {} {}",
-                style("status").cyan(),
-                style("Check application status").dim()
             );
             println!(
                 "  {} {}",

@@ -1,0 +1,35 @@
+{
+  "company_name": "OmniCloud",
+  "admin_name": "Tristan J. Poland",
+  "cloud_name": "omnicloud-cloud",
+  "region": "us-east",
+  "ssh_hosts": [
+    {
+      "name": "mercury",
+      "hostname": "mercury",
+      "username": "trident",
+      "port": 22,
+      "identity_file": null,
+      "is_bastion": false
+    },
+    {
+      "name": "venus",
+      "hostname": "venus",
+      "username": "trident",
+      "port": 22,
+      "identity_file": null,
+      "is_bastion": false
+    },
+    {
+      "name": "jumpbox",
+      "hostname": "jumpbox",
+      "username": "jumpuser",
+      "port": 22,
+      "identity_file": "~/.ssh/id_rsa",
+      "is_bastion": true
+    }
+  ],
+  "enable_monitoring": true,
+  "enable_backups": true,
+  "backup_retention_days": 90
+}

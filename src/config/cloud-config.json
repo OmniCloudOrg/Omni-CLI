@@ -1,0 +1,19 @@
+{
+  "company_name": "Test Corp",
+  "admin_name": "Tristan J. Poland",
+  "cloud_name": "test-corp-cloud",
+  "region": "us-global",
+  "ssh_hosts": [
+    {
+      "name": "mercury",
+      "hostname": "mercury",
+      "username": "trident",
+      "port": 22,
+      "identity_file": null,
+      "is_bastion": true
+    }
+  ],
+  "enable_monitoring": true,
+  "enable_backups": true,
+  "backup_retention_days": 30
+}

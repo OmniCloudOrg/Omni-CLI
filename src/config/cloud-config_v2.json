@@ -1,0 +1,30 @@
+{
+  "company_name": "Test Corp",
+  "admin_name": "Tristan J. Poland",
+  "initial_admin_email": "tristan@testcorp.com",
+  "cloud_name": "test-corp-cloud",
+  "region": "us-global",
+  "api_rate_limit": 1000,
+  "initial_storage_gb": 500,
+  "backup_retention_days": 30,
+  "default_instance_type": "standard-2",
+  "default_vpc_cidr": "10.0.0.0/16",
+  "default_log_level": "INFO",
+  "require_mfa": true,
+  "auto_upgrade": true,
+  "enable_backups": true,
+  "usage_reporting": true,
+  "enable_monitoring": true,
+  "create_demo_resources": false,
+  "ssh_hosts": [
+    {
+      "name": "mercury",
+      "hostname": "mercury",
+      "username": "trident",
+      "port": 22,
+      "identity_file": null,
+      "is_bastion": true
+    }
+  ],
+  "init_version": "1.0.0"
+}

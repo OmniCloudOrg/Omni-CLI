@@ -33,20 +33,20 @@ impl PremiumUI {
 
     pub fn display_welcome(&self) -> Result<()> {
         self.term.clear_screen()?;
-        
+
         // Print logo with a simulated gradient effect
         self.print_gradient_logo();
-        
+
         // Print boxed CLI information that matches the screenshot
         self.print_info_box();
-        
+
         Ok(())
     }
-    
+
     fn print_gradient_logo(&self) {
         // Split the logo into lines
         let logo_lines: Vec<&str> = LOGO.trim_matches('\n').split('\n').collect();
-        
+
         for (i, line) in logo_lines.iter().enumerate() {
             // Use modulo to cycle through colors for a gradient-like effect
             let color_index = i % GRADIENT_COLORS.len();
@@ -54,36 +54,47 @@ impl PremiumUI {
         }
         println!();
     }
-    
+
     fn print_info_box(&self) {
         println!("┌{:─^53}┐", "");
-        println!("│ {}{}│", 
+        println!(
+            "│ {}{}│",
             style("OMNICLOUD CLI").bold().cyan(),
-            " ".repeat(39));
-        println!("│ {}{}│", 
-            style("Version 1.0.0").dim(),
-            " ".repeat(39));
+            " ".repeat(39)
+        );
+        println!(
+            "│ {} {}{}│",
+            style("Version").dim(),
+            style(version::version!()).dim(),
+            " ".repeat(39)
+        );
         println!("│{}│", " ".repeat(53));
-        println!("│ {} Type {} to see available commands{}│", 
-            style("→").cyan(), 
+        println!(
+            "│ {} Type {} to see available commands{}│",
+            style("→").cyan(),
             style("omni help").green(),
-            " ".repeat(10));
-        println!("│ {} Documentation: {}{}│", 
-            style("→").cyan(), 
-            style("https://docs.omniforge.io").cyan(),
-            " ".repeat(10));
-        println!("│ {} Support: {}{}│", 
-            style("→").cyan(), 
-            style("support@omniforge.io").cyan(),
-            " ".repeat(21));
+            " ".repeat(10)
+        );
+        println!(
+            "│ {} Documentation: {}{}│",
+            style("→").cyan(),
+            style("https://docs.omnicloud.sh").cyan(),
+            " ".repeat(10)
+        );
+        println!(
+            "│ {} Support: {}{}│",
+            style("→").cyan(),
+            style("support@omnicloud.sh").cyan(),
+            " ".repeat(21)
+        );
         println!("└{:─^53}┘", "");
         println!();
     }
-    
+
     fn print_status_indicators(&self) {
         // These are removed based on the screenshot
     }
-    
+
     fn show_initializing_spinner(&self) -> Result<()> {
         // Removed the initialization spinner as requested
         Ok(())
@@ -102,14 +113,14 @@ impl PremiumUI {
         pb.set_message(message.to_string());
         pb
     }
-    
+
     // New method for displaying cloud-themed progress
     pub fn deploy_with_progress(&self, steps: u64) -> Result<()> {
         let pb = self.create_progress_bar(steps, "Deploying to cloud");
-        
+
         for i in 0..steps {
             pb.inc(1);
-            
+
             // Add different messages based on progress
             match i {
                 1 => pb.set_message("Initializing containers...".to_string()),
@@ -118,10 +129,10 @@ impl PremiumUI {
                 7 => pb.set_message("Almost there...".to_string()),
                 _ => {}
             }
-            
+
             thread::sleep(Duration::from_millis(300));
         }
-        
+
         pb.finish_with_message("Deployment complete!".to_string());
         Ok(())
     }

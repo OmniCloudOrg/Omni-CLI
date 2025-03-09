@@ -55,6 +55,7 @@ jobs:
     needs: [check-version, create-release]
     if: needs.check-version.outputs.should_release == 'true'
     strategy:
+      fail-fast: false  # Continue with other builds if one fails
       matrix:
         include:
           # Standard platforms
@@ -150,18 +151,78 @@ jobs:
           target: ${{ matrix.target }}
           override: true
           
-      # Install musl-tools for static linking (Linux only)
-      - name: Install musl-tools
-        if: matrix.static == true && contains(matrix.target, 'linux-musl') && !matrix.cross
+      # Install dependencies for Linux builds
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools
+          sudo apt-get install -y pkg-config libssl-dev
+
+      # Install musl-tools and OpenSSL for static Linux builds
+      - name: Install static Linux dependencies
+        if: matrix.static == true && contains(matrix.target, 'linux-musl') && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools musl-dev
+          # Install OpenSSL for static linking
+          wget https://www.openssl.org/source/openssl-1.1.1s.tar.gz
+          tar -xzvf openssl-1.1.1s.tar.gz
+          cd openssl-1.1.1s
+          
+          # For x86_64
+          if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-musl" ]]; then
+            ./Configure no-shared no-async --prefix=/usr/local/musl --openssldir=/usr/local/musl linux-x86_64
+          # For aarch64
+          elif [[ "${{ matrix.target }}" == "aarch64-unknown-linux-musl" ]]; then
+            ./Configure no-shared no-async --prefix=/usr/local/musl --openssldir=/usr/local/musl linux-aarch64
+          fi
+          
+          make -j$(nproc)
+          sudo make install
+          echo "OPENSSL_DIR=/usr/local/musl" >> $GITHUB_ENV
+          echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
       
       # Install cross for cross-compilation
       - name: Install cross
-        if: matrix.cross == true
+        if: matrix.cross == true && runner.os == 'Linux'
         run: |
           cargo install cross --git https://github.com/cross-rs/cross
+          # Create a Cross.toml file to configure OpenSSL for cross-compilation
+          echo '[target.${{ matrix.target }}]' > Cross.toml
+          echo 'image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:latest"' >> Cross.toml
+          echo '[build.env]' >> Cross.toml
+          echo 'passthrough = ["RUSTFLAGS", "OPENSSL_STATIC", "OPENSSL_DIR"]' >> Cross.toml
+
+      # Set environment variables for cross-compilation
+      - name: Set cross-compilation env vars
+        if: matrix.cross == true
+        shell: bash
+        run: |
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+          echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
+          
+          # Add specific RUSTFLAGS for static linking if needed
+          if [[ "${{ matrix.static }}" == "true" ]]; then
+            echo "RUSTFLAGS=-C target-feature=+crt-static" >> $GITHUB_ENV
+          fi
+          
+          # For Android targets
+          if [[ "${{ matrix.target }}" == *"android"* ]]; then
+            echo "RUSTFLAGS=-C link-arg=-landroid -C link-arg=-llog" >> $GITHUB_ENV
+          fi
+          
+          # For WebAssembly
+          if [[ "${{ matrix.target }}" == "wasm32-unknown-unknown" ]]; then
+            echo "RUSTFLAGS=--cfg=web_sys_unstable_apis" >> $GITHUB_ENV
+          fi
+      
+      # Install OpenSSL for macOS
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install openssl@1.1
+          echo "OPENSSL_DIR=$(brew --prefix openssl@1.1)" >> $GITHUB_ENV
       
       # Build using cargo for native targets
       - name: Build native
@@ -173,9 +234,20 @@ jobs:
           
       # Build using cross for cross targets
       - name: Build cross
-        if: matrix.cross == true
+        if: matrix.cross == true && runner.os == 'Linux'
         run: |
-          cross build --release --target ${{ matrix.target }}
+          # For targets that require special handling
+          if [[ "${{ matrix.target }}" == "wasm32-unknown-unknown" ]]; then
+            cargo build --release --target ${{ matrix.target }}
+          else
+            cross build --release --target ${{ matrix.target }}
+          fi
+
+      # Special handling for Windows ARM64
+      - name: Build Windows ARM64
+        if: matrix.target == 'aarch64-pc-windows-msvc' && runner.os == 'Windows'
+        run: |
+          cargo build --release --target ${{ matrix.target }}
 
       - name: Generate SHA256
         shell: bash

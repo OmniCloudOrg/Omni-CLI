@@ -108,6 +108,13 @@ jobs:
           brew install openssl@1.1
           echo "OPENSSL_DIR=$(brew --prefix openssl@1.1)" >> $GITHUB_ENV
       
+      # Install OpenSSL for Linux
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev
+      
       # Build using cargo for native targets
       - name: Build native
         uses: actions-rs/cargo@v1
@@ -167,51 +174,52 @@ jobs:
             bin_name: omni
             asset_name: omni-linux-x86_64-static
             docker_image: clux/muslrust:stable
-            command: cargo build --release --target x86_64-unknown-linux-musl
+            setup: |
+              apt-get update && apt-get install -y pkg-config musl-dev
+            command: |
+              rustup target add x86_64-unknown-linux-musl
+              cargo build --release --target x86_64-unknown-linux-musl
           
           # ARM64 Linux builds
-          - target: aarch64-unknown-linux-gnu
-            bin_name: omni
-            asset_name: omni-linux-arm64
-            docker_image: messense/rust-musl-cross:aarch64-musl
-            command: cargo build --release --target aarch64-unknown-linux-musl
-          
-          # ARM64 static Linux builds
           - target: aarch64-unknown-linux-musl
             bin_name: omni
             asset_name: omni-linux-arm64-static
-            docker_image: messense/rust-musl-cross:aarch64-musl
-            command: cargo build --release --target aarch64-unknown-linux-musl
+            docker_image: ekidd/rust-musl-builder:latest
+            setup: |
+              apt-get update && apt-get install -y pkg-config
+            command: |
+              rustup target add aarch64-unknown-linux-musl
+              PKG_CONFIG_ALLOW_CROSS=1 cargo build --release --features vendored-openssl --target aarch64-unknown-linux-musl
           
           # 32-bit Linux
           - target: i686-unknown-linux-musl
             bin_name: omni
             asset_name: omni-linux-i686-static
-            docker_image: messense/rust-musl-cross:i686-musl
-            command: cargo build --release --target i686-unknown-linux-musl
+            docker_image: ekidd/rust-musl-builder:latest
+            setup: |
+              apt-get update && apt-get install -y pkg-config
+            command: |
+              rustup target add i686-unknown-linux-musl
+              PKG_CONFIG_ALLOW_CROSS=1 cargo build --release --features vendored-openssl --target i686-unknown-linux-musl
           
           # ARMv7 (32-bit ARM for Raspberry Pi)
           - target: armv7-unknown-linux-musleabihf
             bin_name: omni
             asset_name: omni-linux-armv7-static
-            docker_image: messense/rust-musl-cross:armv7-musleabihf
-            command: cargo build --release --target armv7-unknown-linux-musleabihf
-          
-          # Android
-          - target: aarch64-linux-android
-            bin_name: omni
-            asset_name: omni-android-arm64
-            docker_image: rust:latest
+            docker_image: ekidd/rust-musl-builder:latest
+            setup: |
+              apt-get update && apt-get install -y pkg-config
             command: |
-              rustup target add aarch64-linux-android
-              cargo install cargo-ndk
-              cargo ndk --target aarch64-linux-android build --release
+              rustup target add armv7-unknown-linux-musleabihf
+              PKG_CONFIG_ALLOW_CROSS=1 cargo build --release --features vendored-openssl --target armv7-unknown-linux-musleabihf
           
           # WebAssembly
           - target: wasm32-unknown-unknown
             bin_name: omni.wasm
             asset_name: omni.wasm
             docker_image: rust:latest
+            setup: |
+              apt-get update && apt-get install -y pkg-config
             command: |
               rustup target add wasm32-unknown-unknown
               cargo build --release --target wasm32-unknown-unknown
@@ -219,18 +227,30 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
+      # Check if we need to add --features vendored-openssl to your Cargo.toml
+      - name: Update Cargo.toml for OpenSSL vendoring if needed
+        run: |
+          if grep -q "openssl-sys" Cargo.toml; then
+            if ! grep -q "vendored-openssl" Cargo.toml; then
+              # Add vendored-openssl feature to openssl-sys
+              if grep -q "\[features\]" Cargo.toml; then
+                sed -i '/\[features\]/a vendored-openssl = ["openssl-sys/vendored"]' Cargo.toml
+              else
+                echo -e "\n[features]\nvendored-openssl = [\"openssl-sys/vendored\"]" >> Cargo.toml
+              fi
+            fi
+          else
+            echo "No openssl-sys dependency found in Cargo.toml, skipping vendored feature addition"
+          fi
+          cat Cargo.toml
+
       - name: Build in Docker
         run: |
-          if [[ "${{ matrix.target }}" == *"android"* ]]; then
-            # Special handling for Android builds
-            docker run --rm -v $(pwd):/project -w /project ${{ matrix.docker_image }} sh -c "
-              apt-get update && apt-get install -y openjdk-11-jdk
-              ${{ matrix.command }}
-            "
-          else
-            # Standard Docker build
-            docker run --rm -v $(pwd):/project -w /project ${{ matrix.docker_image }} sh -c "${{ matrix.command }}"
-          fi
+          docker run --rm -v $(pwd):/project -w /project ${{ matrix.docker_image }} sh -c "
+            set -e
+            ${{ matrix.setup }}
+            ${{ matrix.command }}
+          "
       
       - name: Prepare Binary
         run: |
@@ -240,8 +260,6 @@ jobs:
           # Find and copy the binary
           if [[ "${{ matrix.target }}" == "wasm32-unknown-unknown" ]]; then
             cp target/wasm32-unknown-unknown/release/${{ matrix.bin_name }} output/
-          elif [[ "${{ matrix.target }}" == *"android"* ]]; then
-            cp target/aarch64-linux-android/release/${{ matrix.bin_name }} output/
           else
             cp target/${{ matrix.target }}/release/${{ matrix.bin_name }} output/
           fi

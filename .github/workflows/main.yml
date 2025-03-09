@@ -58,86 +58,35 @@ jobs:
       fail-fast: false  # Continue with other builds if one fails
       matrix:
         include:
-          # Standard platforms
+          # Standard platforms (dynamically linked)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             bin_path: target/x86_64-unknown-linux-gnu/release/omni
             asset_name: omni-linux-x86_64
+          
+          # Windows builds
           - os: windows-latest 
             target: x86_64-pc-windows-msvc
             bin_path: target/x86_64-pc-windows-msvc/release/omni.exe
             asset_name: omni-windows-x86_64.exe
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            bin_path: target/x86_64-apple-darwin/release/omni
-            asset_name: omni-macos-x86_64
-            
-          # Static Linux builds
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            bin_path: target/x86_64-unknown-linux-musl/release/omni
-            asset_name: omni-linux-x86_64-static
-            static: true
-            
-          # ARM64 builds
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            bin_path: target/aarch64-unknown-linux-gnu/release/omni
-            asset_name: omni-linux-arm64
-            cross: true
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-musl
-            bin_path: target/aarch64-unknown-linux-musl/release/omni
-            asset_name: omni-linux-arm64-static
-            cross: true
-            static: true
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            bin_path: target/aarch64-apple-darwin/release/omni
-            asset_name: omni-macos-arm64
-            
-          # Windows ARM64 build
-          - os: windows-latest
-            target: aarch64-pc-windows-msvc
-            bin_path: target/aarch64-pc-windows-msvc/release/omni.exe
-            asset_name: omni-windows-arm64.exe
-            
-          # 32-bit builds
-          - os: ubuntu-latest
-            target: i686-unknown-linux-gnu
-            bin_path: target/i686-unknown-linux-gnu/release/omni
-            asset_name: omni-linux-i686
-            cross: true
           - os: windows-latest
             target: i686-pc-windows-msvc
             bin_path: target/i686-pc-windows-msvc/release/omni.exe
             asset_name: omni-windows-i686.exe
-            
-          # FreeBSD (cross-compilation)
-          - os: ubuntu-latest
-            target: x86_64-unknown-freebsd
-            bin_path: target/x86_64-unknown-freebsd/release/omni
-            asset_name: omni-freebsd-x86_64
-            cross: true
-            
-          # Android
-          - os: ubuntu-latest
-            target: aarch64-linux-android
-            bin_path: target/aarch64-linux-android/release/omni
-            asset_name: omni-android-arm64
-            cross: true
-          - os: ubuntu-latest
-            target: armv7-linux-androideabi
-            bin_path: target/armv7-linux-androideabi/release/omni
-            asset_name: omni-android-armv7
-            cross: true
-            
-          # WebAssembly (for browser/Node.js)
-          - os: ubuntu-latest
-            target: wasm32-unknown-unknown
-            bin_path: target/wasm32-unknown-unknown/release/omni.wasm
-            asset_name: omni.wasm
-            cross: true
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            bin_path: target/aarch64-pc-windows-msvc/release/omni.exe
+            asset_name: omni-windows-arm64.exe
+          
+          # macOS builds
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bin_path: target/x86_64-apple-darwin/release/omni
+            asset_name: omni-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bin_path: target/aarch64-apple-darwin/release/omni
+            asset_name: omni-macos-arm64
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -150,71 +99,6 @@ jobs:
           toolchain: stable
           target: ${{ matrix.target }}
           override: true
-          
-      # Install dependencies for Linux builds
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev
-
-      # Install musl-tools and OpenSSL for static Linux builds
-      - name: Install static Linux dependencies
-        if: matrix.static == true && contains(matrix.target, 'linux-musl') && runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools musl-dev
-          # Install OpenSSL for static linking
-          wget https://www.openssl.org/source/openssl-1.1.1s.tar.gz
-          tar -xzvf openssl-1.1.1s.tar.gz
-          cd openssl-1.1.1s
-          
-          # For x86_64
-          if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-musl" ]]; then
-            ./Configure no-shared no-async --prefix=/usr/local/musl --openssldir=/usr/local/musl linux-x86_64
-          # For aarch64
-          elif [[ "${{ matrix.target }}" == "aarch64-unknown-linux-musl" ]]; then
-            ./Configure no-shared no-async --prefix=/usr/local/musl --openssldir=/usr/local/musl linux-aarch64
-          fi
-          
-          make -j$(nproc)
-          sudo make install
-          echo "OPENSSL_DIR=/usr/local/musl" >> $GITHUB_ENV
-          echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
-      
-      # Install cross for cross-compilation
-      - name: Install cross
-        if: matrix.cross == true && runner.os == 'Linux'
-        run: |
-          cargo install cross --git https://github.com/cross-rs/cross
-          # Create a Cross.toml file to configure OpenSSL for cross-compilation
-          echo '[target.${{ matrix.target }}]' > Cross.toml
-          echo 'image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:latest"' >> Cross.toml
-          echo '[build.env]' >> Cross.toml
-          echo 'passthrough = ["RUSTFLAGS", "OPENSSL_STATIC", "OPENSSL_DIR"]' >> Cross.toml
-
-      # Set environment variables for cross-compilation
-      - name: Set cross-compilation env vars
-        if: matrix.cross == true
-        shell: bash
-        run: |
-          echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
-          echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
-          
-          # Add specific RUSTFLAGS for static linking if needed
-          if [[ "${{ matrix.static }}" == "true" ]]; then
-            echo "RUSTFLAGS=-C target-feature=+crt-static" >> $GITHUB_ENV
-          fi
-          
-          # For Android targets
-          if [[ "${{ matrix.target }}" == *"android"* ]]; then
-            echo "RUSTFLAGS=-C link-arg=-landroid -C link-arg=-llog" >> $GITHUB_ENV
-          fi
-          
-          # For WebAssembly
-          if [[ "${{ matrix.target }}" == "wasm32-unknown-unknown" ]]; then
-            echo "RUSTFLAGS=--cfg=web_sys_unstable_apis" >> $GITHUB_ENV
-          fi
       
       # Install OpenSSL for macOS
       - name: Install macOS dependencies
@@ -226,28 +110,10 @@ jobs:
       
       # Build using cargo for native targets
       - name: Build native
-        if: matrix.cross != true
         uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release --target ${{ matrix.target }}
-          
-      # Build using cross for cross targets
-      - name: Build cross
-        if: matrix.cross == true && runner.os == 'Linux'
-        run: |
-          # For targets that require special handling
-          if [[ "${{ matrix.target }}" == "wasm32-unknown-unknown" ]]; then
-            cargo build --release --target ${{ matrix.target }}
-          else
-            cross build --release --target ${{ matrix.target }}
-          fi
-
-      # Special handling for Windows ARM64
-      - name: Build Windows ARM64
-        if: matrix.target == 'aarch64-pc-windows-msvc' && runner.os == 'Windows'
-        run: |
-          cargo build --release --target ${{ matrix.target }}
 
       - name: Generate SHA256
         shell: bash
@@ -284,5 +150,122 @@ jobs:
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
           asset_path: ${{ matrix.bin_path }}.sha256
+          asset_name: ${{ matrix.asset_name }}.sha256
+          asset_content_type: text/plain
+
+  # Use Docker for more complex builds that need specific environments
+  docker-builds:
+    needs: [check-version, create-release]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Static Linux builds using Docker
+          - target: x86_64-unknown-linux-musl
+            bin_name: omni
+            asset_name: omni-linux-x86_64-static
+            docker_image: clux/muslrust:stable
+            command: cargo build --release --target x86_64-unknown-linux-musl
+          
+          # ARM64 Linux builds
+          - target: aarch64-unknown-linux-gnu
+            bin_name: omni
+            asset_name: omni-linux-arm64
+            docker_image: messense/rust-musl-cross:aarch64-musl
+            command: cargo build --release --target aarch64-unknown-linux-musl
+          
+          # ARM64 static Linux builds
+          - target: aarch64-unknown-linux-musl
+            bin_name: omni
+            asset_name: omni-linux-arm64-static
+            docker_image: messense/rust-musl-cross:aarch64-musl
+            command: cargo build --release --target aarch64-unknown-linux-musl
+          
+          # 32-bit Linux
+          - target: i686-unknown-linux-musl
+            bin_name: omni
+            asset_name: omni-linux-i686-static
+            docker_image: messense/rust-musl-cross:i686-musl
+            command: cargo build --release --target i686-unknown-linux-musl
+          
+          # ARMv7 (32-bit ARM for Raspberry Pi)
+          - target: armv7-unknown-linux-musleabihf
+            bin_name: omni
+            asset_name: omni-linux-armv7-static
+            docker_image: messense/rust-musl-cross:armv7-musleabihf
+            command: cargo build --release --target armv7-unknown-linux-musleabihf
+          
+          # Android
+          - target: aarch64-linux-android
+            bin_name: omni
+            asset_name: omni-android-arm64
+            docker_image: rust:latest
+            command: |
+              rustup target add aarch64-linux-android
+              cargo install cargo-ndk
+              cargo ndk --target aarch64-linux-android build --release
+          
+          # WebAssembly
+          - target: wasm32-unknown-unknown
+            bin_name: omni.wasm
+            asset_name: omni.wasm
+            docker_image: rust:latest
+            command: |
+              rustup target add wasm32-unknown-unknown
+              cargo build --release --target wasm32-unknown-unknown
+
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Build in Docker
+        run: |
+          if [[ "${{ matrix.target }}" == *"android"* ]]; then
+            # Special handling for Android builds
+            docker run --rm -v $(pwd):/project -w /project ${{ matrix.docker_image }} sh -c "
+              apt-get update && apt-get install -y openjdk-11-jdk
+              ${{ matrix.command }}
+            "
+          else
+            # Standard Docker build
+            docker run --rm -v $(pwd):/project -w /project ${{ matrix.docker_image }} sh -c "${{ matrix.command }}"
+          fi
+      
+      - name: Prepare Binary
+        run: |
+          # Create the output directory
+          mkdir -p output
+          
+          # Find and copy the binary
+          if [[ "${{ matrix.target }}" == "wasm32-unknown-unknown" ]]; then
+            cp target/wasm32-unknown-unknown/release/${{ matrix.bin_name }} output/
+          elif [[ "${{ matrix.target }}" == *"android"* ]]; then
+            cp target/aarch64-linux-android/release/${{ matrix.bin_name }} output/
+          else
+            cp target/${{ matrix.target }}/release/${{ matrix.bin_name }} output/
+          fi
+          
+          # Generate SHA256
+          cd output
+          sha256sum ${{ matrix.bin_name }} > ${{ matrix.bin_name }}.sha256
+      
+      - name: Upload Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: output/${{ matrix.bin_name }}
+          asset_name: ${{ matrix.asset_name }}
+          asset_content_type: application/octet-stream
+      
+      - name: Upload SHA256
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: output/${{ matrix.bin_name }}.sha256
           asset_name: ${{ matrix.asset_name }}.sha256
           asset_content_type: text/plain

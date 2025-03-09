@@ -56,20 +56,87 @@ jobs:
     if: needs.check-version.outputs.should_release == 'true'
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
         include:
+          # Standard platforms
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             bin_path: target/x86_64-unknown-linux-gnu/release/omni
-            asset_name: omni-linux
+            asset_name: omni-linux-x86_64
           - os: windows-latest 
             target: x86_64-pc-windows-msvc
             bin_path: target/x86_64-pc-windows-msvc/release/omni.exe
-            asset_name: omni-windows.exe
+            asset_name: omni-windows-x86_64.exe
           - os: macos-latest
             target: x86_64-apple-darwin
             bin_path: target/x86_64-apple-darwin/release/omni
-            asset_name: omni-macos
+            asset_name: omni-macos-x86_64
+            
+          # Static Linux builds
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            bin_path: target/x86_64-unknown-linux-musl/release/omni
+            asset_name: omni-linux-x86_64-static
+            static: true
+            
+          # ARM64 builds
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            bin_path: target/aarch64-unknown-linux-gnu/release/omni
+            asset_name: omni-linux-arm64
+            cross: true
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            bin_path: target/aarch64-unknown-linux-musl/release/omni
+            asset_name: omni-linux-arm64-static
+            cross: true
+            static: true
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bin_path: target/aarch64-apple-darwin/release/omni
+            asset_name: omni-macos-arm64
+            
+          # Windows ARM64 build
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            bin_path: target/aarch64-pc-windows-msvc/release/omni.exe
+            asset_name: omni-windows-arm64.exe
+            
+          # 32-bit builds
+          - os: ubuntu-latest
+            target: i686-unknown-linux-gnu
+            bin_path: target/i686-unknown-linux-gnu/release/omni
+            asset_name: omni-linux-i686
+            cross: true
+          - os: windows-latest
+            target: i686-pc-windows-msvc
+            bin_path: target/i686-pc-windows-msvc/release/omni.exe
+            asset_name: omni-windows-i686.exe
+            
+          # FreeBSD (cross-compilation)
+          - os: ubuntu-latest
+            target: x86_64-unknown-freebsd
+            bin_path: target/x86_64-unknown-freebsd/release/omni
+            asset_name: omni-freebsd-x86_64
+            cross: true
+            
+          # Android
+          - os: ubuntu-latest
+            target: aarch64-linux-android
+            bin_path: target/aarch64-linux-android/release/omni
+            asset_name: omni-android-arm64
+            cross: true
+          - os: ubuntu-latest
+            target: armv7-linux-androideabi
+            bin_path: target/armv7-linux-androideabi/release/omni
+            asset_name: omni-android-armv7
+            cross: true
+            
+          # WebAssembly (for browser/Node.js)
+          - os: ubuntu-latest
+            target: wasm32-unknown-unknown
+            bin_path: target/wasm32-unknown-unknown/release/omni.wasm
+            asset_name: omni.wasm
+            cross: true
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -81,29 +148,48 @@ jobs:
           profile: minimal
           toolchain: stable
           target: ${{ matrix.target }}
+          override: true
           
-      - name: Build
+      # Install musl-tools for static linking (Linux only)
+      - name: Install musl-tools
+        if: matrix.static == true && contains(matrix.target, 'linux-musl') && !matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+      
+      # Install cross for cross-compilation
+      - name: Install cross
+        if: matrix.cross == true
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
+      
+      # Build using cargo for native targets
+      - name: Build native
+        if: matrix.cross != true
         uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release --target ${{ matrix.target }}
+          
+      # Build using cross for cross targets
+      - name: Build cross
+        if: matrix.cross == true
+        run: |
+          cross build --release --target ${{ matrix.target }}
 
       - name: Generate SHA256
         shell: bash
         run: |
-          binary_path="target/${{ matrix.target }}/release/omni"
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            binary_path="target/${{ matrix.target }}/release/omni.exe"
-          fi
+          binary_path="${{ matrix.bin_path }}"
           
           if [ ! -f "$binary_path" ]; then
             echo "Binary not found at $binary_path"
-            ls -la target/
-            ls -la target/${{ matrix.target }}/release/
+            # Try to list outputs for debugging
+            find target -name omni -o -name omni.exe -o -name "*.wasm" | sort
             exit 1
           fi
           
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
             sha256sum "$binary_path" > "$binary_path.sha256"
           else
             shasum -a 256 "$binary_path" > "$binary_path.sha256"

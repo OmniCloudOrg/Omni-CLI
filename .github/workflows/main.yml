@@ -160,51 +160,7 @@ jobs:
           asset_name: ${{ matrix.asset_name }}.sha256
           asset_content_type: text/plain
 
-  # Static x86_64 Linux Build (most reliable approach)
-  static-linux-build:
-    needs: [check-version, create-release]
-    if: needs.check-version.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    container:
-      image: rust:alpine
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Install dependencies
-        run: |
-          apk add --no-cache musl-dev openssl-dev openssl-libs-static pkgconfig git
-      
-      - name: Build static binary
-        run: |
-          # Use RUSTFLAGS to statically link everything
-          RUSTFLAGS='-C target-feature=+crt-static' cargo build --release --target x86_64-unknown-linux-musl
-      
-      - name: Generate SHA256
-        run: |
-          cd target/x86_64-unknown-linux-musl/release
-          sha256sum omni > omni.sha256
-      
-      - name: Upload Binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: target/x86_64-unknown-linux-musl/release/omni
-          asset_name: omni-linux-x86_64-static
-          asset_content_type: application/octet-stream
-      
-      - name: Upload SHA256
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: target/x86_64-unknown-linux-musl/release/omni.sha256
-          asset_name: omni-linux-x86_64-static.sha256
-          asset_content_type: text/plain
-
-  # Use cross for other more complex cross-compilation targets
+  # Use cross for more complex cross-compilation targets
   cross-builds:
     needs: [check-version, create-release]
     if: needs.check-version.outputs.should_release == 'true'
@@ -213,35 +169,49 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Static Linux build
+          - target: x86_64-unknown-linux-musl
+            asset_name: omni-linux-x86_64-static
+            openssl_arch: amd64
+            
           # ARM64 Linux 
           - target: aarch64-unknown-linux-gnu
             asset_name: omni-linux-arm64
+            openssl_arch: arm64
           
           # ARM64 static Linux 
           - target: aarch64-unknown-linux-musl
             asset_name: omni-linux-arm64-static
-            static: true
+            openssl_arch: arm64
           
           # 32-bit Linux
           - target: i686-unknown-linux-gnu
             asset_name: omni-linux-i686
+            openssl_arch: i386
+          
+          # 32-bit static Linux
+          - target: i686-unknown-linux-musl
+            asset_name: omni-linux-i686-static
+            openssl_arch: i386
           
           # ARMv7 (32-bit ARM for Raspberry Pi)
           - target: armv7-unknown-linux-gnueabihf
             asset_name: omni-linux-armv7
+            openssl_arch: armhf
           
-          # WASM target
+          # ARMv7 static
+          - target: armv7-unknown-linux-musleabihf
+            asset_name: omni-linux-armv7-static
+            openssl_arch: armhf
+          
+          # WebAssembly
           - target: wasm32-unknown-unknown
             asset_name: omni.wasm
             extension: .wasm
+            no_openssl: true
 
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev musl-tools
       
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -253,26 +223,46 @@ jobs:
       
       - name: Install cross
         run: |
-          cargo install cross
+          cargo install cross --git https://github.com/cross-rs/cross
       
-      - name: Build with cross
+      # Create Cross.toml with pre-build commands for OpenSSL
+      - name: Configure cross for OpenSSL
+        if: ${{ !matrix.no_openssl }}
         run: |
-          # Special case for wasm
-          if [[ "${{ matrix.target }}" == "wasm32-unknown-unknown" ]]; then
-            cargo build --release --target wasm32-unknown-unknown
-          elif [[ "${{ matrix.static }}" == "true" ]]; then
-            # Static build
-            cross build --release --target ${{ matrix.target }} -Z build-std
-          else
-            # Dynamic build
-            cross build --release --target ${{ matrix.target }}
-          fi
+          cat > Cross.toml << EOF
+          [target.${{ matrix.target }}]
+          pre-build = [
+              "dpkg --add-architecture ${{ matrix.openssl_arch }}",
+              "apt-get update",
+              "apt-get install -y libssl-dev:${{ matrix.openssl_arch }}"
+          ]
+          EOF
+          
+          cat Cross.toml
+      
+      # Special build for WebAssembly
+      - name: Build WebAssembly
+        if: matrix.target == 'wasm32-unknown-unknown'
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo build --release --target wasm32-unknown-unknown
+      
+      # Build using cross for non-WASM targets
+      - name: Build with cross
+        if: matrix.target != 'wasm32-unknown-unknown'
+        run: |
+          cross build --release --target ${{ matrix.target }}
       
       - name: Generate SHA256
         run: |
-          cd target/${{ matrix.target }}/release
-          BINARY_NAME=omni${{ matrix.extension || '' }}
-          sha256sum $BINARY_NAME > $BINARY_NAME.sha256
+          binary_path="target/${{ matrix.target }}/release/omni${{ matrix.extension || '' }}"
+          if [ -f "$binary_path" ]; then
+            sha256sum "$binary_path" > "$binary_path.sha256"
+          else
+            echo "Binary not found at $binary_path"
+            find target -name omni -o -name omni.exe -o -name "*.wasm" | sort
+            exit 1
+          fi
       
       - name: Upload Binary
         uses: actions/upload-release-asset@v1

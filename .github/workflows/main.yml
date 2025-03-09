@@ -160,159 +160,29 @@ jobs:
           asset_name: ${{ matrix.asset_name }}.sha256
           asset_content_type: text/plain
 
-  # Use Docker for more complex builds that need specific environments
-  docker-builds:
+  # Static x86_64 Linux Build (most reliable approach)
+  static-linux-build:
     needs: [check-version, create-release]
     if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Static Linux builds using Docker
-          - target: x86_64-unknown-linux-musl
-            bin_name: omni
-            asset_name: omni-linux-x86_64-static
-            docker_image: clux/muslrust:stable
-            setup: |
-              apt-get update && apt-get install -y pkg-config musl-dev
-            command: cargo build --release --target x86_64-unknown-linux-musl
-          
-          # ARM64 Linux builds
-          - target: aarch64-unknown-linux-gnu
-            bin_name: omni
-            asset_name: omni-linux-arm64
-            docker_image: messense/rust-musl-cross:aarch64-musl
-            setup: |
-              apt-get update && apt-get install -y pkg-config libssl-dev musl-dev
-              echo 'OPENSSL_STATIC=1' >> $CARGO_HOME/config.toml
-              echo 'OPENSSL_DIR=/usr/include/openssl' >> $CARGO_HOME/config.toml
-            command: cargo build --release --target aarch64-unknown-linux-musl
-          
-          # ARM64 static Linux builds
-          - target: aarch64-unknown-linux-musl
-            bin_name: omni
-            asset_name: omni-linux-arm64-static
-            docker_image: messense/rust-musl-cross:aarch64-musl
-            setup: |
-              apt-get update && apt-get install -y pkg-config libssl-dev musl-dev
-              echo 'OPENSSL_STATIC=1' >> $CARGO_HOME/config.toml
-            command: |
-              # Add vendored-openssl feature if available
-              if grep -q "openssl-sys" Cargo.toml; then
-                RUSTFLAGS="-C target-feature=+crt-static" PKG_CONFIG_ALLOW_CROSS=1 cargo build --release --features vendored-openssl --target aarch64-unknown-linux-musl
-              else
-                RUSTFLAGS="-C target-feature=+crt-static" PKG_CONFIG_ALLOW_CROSS=1 cargo build --release --target aarch64-unknown-linux-musl
-              fi
-          
-          # 32-bit Linux
-          - target: i686-unknown-linux-musl
-            bin_name: omni
-            asset_name: omni-linux-i686-static
-            docker_image: messense/rust-musl-cross:i686-musl
-            setup: |
-              apt-get update && apt-get install -y pkg-config libssl-dev musl-dev
-              echo 'OPENSSL_STATIC=1' >> $CARGO_HOME/config.toml
-            command: |
-              # Add vendored-openssl feature if available
-              if grep -q "openssl-sys" Cargo.toml; then
-                RUSTFLAGS="-C target-feature=+crt-static" PKG_CONFIG_ALLOW_CROSS=1 cargo build --release --features vendored-openssl --target i686-unknown-linux-musl
-              else
-                RUSTFLAGS="-C target-feature=+crt-static" PKG_CONFIG_ALLOW_CROSS=1 cargo build --release --target i686-unknown-linux-musl
-              fi
-          
-          # ARMv7 (32-bit ARM for Raspberry Pi)
-          - target: armv7-unknown-linux-musleabihf
-            bin_name: omni
-            asset_name: omni-linux-armv7-static
-            docker_image: messense/rust-musl-cross:armv7-musleabihf
-            setup: |
-              apt-get update && apt-get install -y pkg-config libssl-dev musl-dev
-              echo 'OPENSSL_STATIC=1' >> $CARGO_HOME/config.toml
-            command: |
-              # Add vendored-openssl feature if available
-              if grep -q "openssl-sys" Cargo.toml; then
-                RUSTFLAGS="-C target-feature=+crt-static" PKG_CONFIG_ALLOW_CROSS=1 cargo build --release --features vendored-openssl --target armv7-unknown-linux-musleabihf
-              else
-                RUSTFLAGS="-C target-feature=+crt-static" PKG_CONFIG_ALLOW_CROSS=1 cargo build --release --target armv7-unknown-linux-musleabihf
-              fi
-          
-          # Android
-          - target: aarch64-linux-android
-            bin_name: omni
-            asset_name: omni-android-arm64
-            docker_image: rust:latest
-            setup: |
-              apt-get update && apt-get install -y pkg-config libssl-dev openjdk-11-jdk
-              rustup target add aarch64-linux-android
-              cargo install cargo-ndk
-            command: cargo ndk --target aarch64-linux-android build --release
-          
-          # WebAssembly
-          - target: wasm32-unknown-unknown
-            bin_name: omni.wasm
-            asset_name: omni.wasm
-            docker_image: rust:latest
-            setup: |
-              apt-get update && apt-get install -y pkg-config
-              rustup target add wasm32-unknown-unknown
-            command: cargo build --release --target wasm32-unknown-unknown
-
+    container:
+      image: rust:alpine
     steps:
       - uses: actions/checkout@v3
       
-      # Check if we need to add vendored-openssl feature to Cargo.toml
-      - name: Update Cargo.toml for OpenSSL vendoring if needed
+      - name: Install dependencies
         run: |
-          if grep -q "openssl-sys" Cargo.toml; then
-            if ! grep -q "vendored-openssl" Cargo.toml; then
-              # Add vendored-openssl feature to openssl-sys
-              if grep -q "\[features\]" Cargo.toml; then
-                sed -i '/\[features\]/a vendored-openssl = ["openssl-sys/vendored"]' Cargo.toml
-              else
-                echo -e "\n[features]\nvendored-openssl = [\"openssl-sys/vendored\"]" >> Cargo.toml
-              fi
-              echo "Added vendored-openssl feature to Cargo.toml"
-            else
-              echo "vendored-openssl feature already exists in Cargo.toml"
-            fi
-          else
-            echo "No openssl-sys dependency found in Cargo.toml, skipping vendored feature addition"
-          fi
-          cat Cargo.toml
-
-      - name: Build in Docker
-        run: |
-          docker run --rm -v $(pwd):/project -w /project ${{ matrix.docker_image }} sh -c "
-            set -e
-            # Setup dependencies
-            ${{ matrix.setup }}
-            
-            # Build
-            ${{ matrix.command }}
-            
-            # Debug output
-            echo 'Build completed, checking for binary...'
-            find target -name ${{ matrix.bin_name }} | sort
-          "
+          apk add --no-cache musl-dev openssl-dev openssl-libs-static pkgconfig git
       
-      - name: Prepare Binary
+      - name: Build static binary
         run: |
-          # Create the output directory
-          mkdir -p output
-          
-          # Find and copy the binary
-          if [[ "${{ matrix.target }}" == "wasm32-unknown-unknown" ]]; then
-            cp target/wasm32-unknown-unknown/release/${{ matrix.bin_name }} output/
-          elif [[ "${{ matrix.target }}" == *"android"* ]]; then
-            cp target/aarch64-linux-android/release/${{ matrix.bin_name }} output/
-          else
-            cp target/${{ matrix.target }}/release/${{ matrix.bin_name }} output/
-          fi
-          
-          # Generate SHA256
-          cd output
-          sha256sum ${{ matrix.bin_name }} > ${{ matrix.bin_name }}.sha256
+          # Use RUSTFLAGS to statically link everything
+          RUSTFLAGS='-C target-feature=+crt-static' cargo build --release --target x86_64-unknown-linux-musl
+      
+      - name: Generate SHA256
+        run: |
+          cd target/x86_64-unknown-linux-musl/release
+          sha256sum omni > omni.sha256
       
       - name: Upload Binary
         uses: actions/upload-release-asset@v1
@@ -320,7 +190,97 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: output/${{ matrix.bin_name }}
+          asset_path: target/x86_64-unknown-linux-musl/release/omni
+          asset_name: omni-linux-x86_64-static
+          asset_content_type: application/octet-stream
+      
+      - name: Upload SHA256
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: target/x86_64-unknown-linux-musl/release/omni.sha256
+          asset_name: omni-linux-x86_64-static.sha256
+          asset_content_type: text/plain
+
+  # Use cross for other more complex cross-compilation targets
+  cross-builds:
+    needs: [check-version, create-release]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ARM64 Linux 
+          - target: aarch64-unknown-linux-gnu
+            asset_name: omni-linux-arm64
+          
+          # ARM64 static Linux 
+          - target: aarch64-unknown-linux-musl
+            asset_name: omni-linux-arm64-static
+            static: true
+          
+          # 32-bit Linux
+          - target: i686-unknown-linux-gnu
+            asset_name: omni-linux-i686
+          
+          # ARMv7 (32-bit ARM for Raspberry Pi)
+          - target: armv7-unknown-linux-gnueabihf
+            asset_name: omni-linux-armv7
+          
+          # WASM target
+          - target: wasm32-unknown-unknown
+            asset_name: omni.wasm
+            extension: .wasm
+
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev musl-tools
+      
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+      
+      - name: Install cross
+        run: |
+          cargo install cross
+      
+      - name: Build with cross
+        run: |
+          # Special case for wasm
+          if [[ "${{ matrix.target }}" == "wasm32-unknown-unknown" ]]; then
+            cargo build --release --target wasm32-unknown-unknown
+          elif [[ "${{ matrix.static }}" == "true" ]]; then
+            # Static build
+            cross build --release --target ${{ matrix.target }} -Z build-std
+          else
+            # Dynamic build
+            cross build --release --target ${{ matrix.target }}
+          fi
+      
+      - name: Generate SHA256
+        run: |
+          cd target/${{ matrix.target }}/release
+          BINARY_NAME=omni${{ matrix.extension || '' }}
+          sha256sum $BINARY_NAME > $BINARY_NAME.sha256
+      
+      - name: Upload Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: target/${{ matrix.target }}/release/omni${{ matrix.extension || '' }}
           asset_name: ${{ matrix.asset_name }}
           asset_content_type: application/octet-stream
       
@@ -330,6 +290,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: output/${{ matrix.bin_name }}.sha256
+          asset_path: target/${{ matrix.target }}/release/omni${{ matrix.extension || '' }}.sha256
           asset_name: ${{ matrix.asset_name }}.sha256
           asset_content_type: text/plain

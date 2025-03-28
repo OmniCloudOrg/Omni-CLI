@@ -7,6 +7,12 @@ use std::fs;
 use std::path::Path;
 use tabled::{Table, Tabled};
 
+#[derive(Debug, Deserialize)]
+struct ApiResponse {
+    status: String,
+    message: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SshHost {
     name: String,
@@ -357,7 +363,6 @@ impl PremiumUI {
             "\n{}",
             style("🔄 Initializing platform with API").cyan().bold()
         );
-
         let pb = self.create_progress_bar(100, "Sending configuration to API");
 
         for i in 0..100 {
@@ -372,19 +377,17 @@ impl PremiumUI {
             }
         }
 
-        let config_content = match fs::read_to_string(config_path) {
-            Ok(content) => {
-                println!("{}", content);
-                content
-            }
-            Err(error) => {
-                println!("Error reading the config file init_env.rs");
-                String::new()  // Return empty string in case of error
-            }
-        };
-
         // make the actual API call here
-        let response = self.api_client.post("v1/platforms/init", &config).await?;
+        match self.api_client.post::<_, ApiResponse>("/platforms/init", &config).await {
+            Err(err) => {
+                println!("{}", style("API initialization failed: ").red().bold());
+                println!("{}", style(format!("{:?}", err)).red());
+                println!("{}", style("Continuing with local setup only.").yellow());
+            },
+            Ok(response) => {
+                println!("{}", style(format!("API initialization successful: {}", response.message)).green());
+            }
+        }
 
         pb.finish_with_message("Platform initialized successfully ✓");
 

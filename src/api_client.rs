@@ -21,7 +21,7 @@ impl ApiClient {
             
         Self {
             client,
-            base_url: String::from("https://api.omnicloud.sh/v1"),
+            base_url: String::from("http://localhost:8002/api/v1"),
             headers,
         }
     }

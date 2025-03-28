@@ -15,7 +15,7 @@ serde_yaml = "0.9.34"
 spinners = "4.1.1"
 tabled = "0.17.0"
 tar = "0.4.43"
-reqwest = { version = "0.12.12", features = ["multipart"] }
+reqwest = { version = "0.12.12", features = ["multipart", "json"] }
 tokio = { version = "1.42.0", features = ["macros", "rt-multi-thread", "fs"] }
 uuid = { version = "1.11.0", features = ["v4"] }
 tempfile = "3.14.0"

@@ -3,6 +3,7 @@ use crate::ui::PremiumUI;
 use clap::{Arg, Command};
 use console::style;
 
+mod api_client;
 mod commands;
 mod models;
 mod ui;

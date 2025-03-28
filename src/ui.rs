@@ -4,6 +4,7 @@ use dialoguer::theme::ColorfulTheme;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use spinners::{Spinner, Spinners};
 use std::{thread, time::Duration};
+use crate::api_client::ApiClient;
 
 const LOGO: &str = r#"
     __                      _           _____ __                   __
@@ -20,6 +21,7 @@ pub struct PremiumUI {
     pub term: Term,
     pub multi_progress: MultiProgress,
     pub theme: ColorfulTheme,
+    pub api_client: ApiClient,
 }
 
 impl PremiumUI {
@@ -28,6 +30,7 @@ impl PremiumUI {
             term: Term::stdout(),
             multi_progress: MultiProgress::new(),
             theme: ColorfulTheme::default(),
+            api_client: ApiClient::new(),
         }
     }
 

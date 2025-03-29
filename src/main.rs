@@ -179,7 +179,7 @@ async fn main() -> anyhow::Result<()> {
         // OmniOrchestrator commands
         Some(("init", _)) => ui.init_environment().await?,
         Some(("hosts", _)) => ui.list_ssh_hosts().await?,
-        Some(("status", _)) => ui.orchestrator_status().await?,
+        Some(("status", _)) => ui.status_interactive().await?,
 
         // Application deployment commands
         Some(("up", _)) => ui.deploy_interactive().await?,

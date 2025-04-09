@@ -23,6 +23,7 @@ pub struct SshHost {
     name: String,
     hostname: String,
     username: String,
+    password: String,
     port: u16,
     identity_file: Option<String>,
     is_bastion: bool,
@@ -68,6 +69,8 @@ struct SshHostDisplay {
     hostname: String,
     #[tabled(rename = "Username")]
     username: String,
+    #[tabled(rename = "Password")]
+    password: String,
     #[tabled(rename = "Port")]
     port: String,
     #[tabled(rename = "Identity File")]
@@ -98,6 +101,7 @@ impl From<&SshHost> for SshHostDisplay {
             name: host.name.clone(),
             hostname: host.hostname.clone(),
             username: host.username.clone(),
+            password: host.password.clone(),
             port: host.port.to_string(),
             identity_file: host
                 .identity_file
@@ -220,7 +224,12 @@ impl PremiumUI {
 
                 let username: String = Input::with_theme(&self.theme)
                     .with_prompt("SSH username")
-                    .default("admin".into())
+                    .default("root".into())
+                    .interact_text()?;
+
+                let password:String = Input::with_theme(&self.theme)
+                    .with_prompt("SSH password")
+                    .default("".into())
                     .interact_text()?;
 
                 let port: u16 = Input::with_theme(&self.theme)
@@ -254,6 +263,7 @@ impl PremiumUI {
                     name: host_name,
                     hostname,
                     username,
+                    password,
                     port,
                     identity_file,
                     is_bastion,

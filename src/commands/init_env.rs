@@ -23,7 +23,7 @@ pub struct SshHost {
     name: String,
     hostname: String,
     username: String,
-    password: String,
+    password: Option<String>,
     port: u16,
     identity_file: Option<String>,
     is_bastion: bool,
@@ -101,7 +101,7 @@ impl From<&SshHost> for SshHostDisplay {
             name: host.name.clone(),
             hostname: host.hostname.clone(),
             username: host.username.clone(),
-            password: host.password.clone(),
+            password: "***".to_string(),
             port: host.port.to_string(),
             identity_file: host
                 .identity_file
@@ -227,30 +227,31 @@ impl PremiumUI {
                     .default("root".into())
                     .interact_text()?;
 
-                let password:String = Input::with_theme(&self.theme)
-                    .with_prompt("SSH password")
-                    .default("".into())
-                    .interact_text()?;
-
                 let port: u16 = Input::with_theme(&self.theme)
                     .with_prompt("SSH port")
                     .default(22)
                     .interact_text()?;
 
                 let use_identity_file = Confirm::with_theme(&self.theme)
-                    .with_prompt("Use identity file for authentication?")
+                    .with_prompt("Use identity file for authentication? (If no you will be prompted for the password)")
                     .default(true)
                     .interact()?;
 
-                let identity_file = if use_identity_file {
-                    Some(
+                let mut identity_file: Option<String> = None;
+                let mut password: Option<String> = None;
+                if use_identity_file {
+                    identity_file = Some(
                         Input::with_theme(&self.theme)
                             .with_prompt("Path to identity file")
                             .default("~/.ssh/id_rsa".into())
                             .interact_text()?,
-                    )
+                    );
                 } else {
-                    None
+                    let input_password = Input::with_theme(&self.theme)
+                        .with_prompt("SSH password")
+                        .default("".into())
+                        .interact_text()?;
+                    password = Some(input_password);
                 };
 
                 let is_bastion = Confirm::with_theme(&self.theme)

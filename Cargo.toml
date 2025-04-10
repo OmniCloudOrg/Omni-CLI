@@ -25,3 +25,4 @@ pathdiff = "0.2.3"
 serde_json = "1.0.134"
 serde = { version = "1.0.217", features = ["derive"] }
 version = "3.0.0"
+libomni = "0.2.2"

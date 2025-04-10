@@ -160,15 +160,35 @@ impl PremiumUI {
                 ))
                 .interact_text()?;
 
-            // Region selection
-            let regions = vec![
-                "us-east",
-                "us-west",
-                "eu-west",
-                "eu-central",
-                "ap-southeast",
-                "custom",
-            ];
+            // Fetch regions from API
+            println!("{}", style("Fetching available regions...").dim());
+            let regions_response = match self.api_client.get::<Vec<libomni::types::db::v1::Region>>("/regions").await {
+                Ok(response) => {
+                    response
+                },
+                Err(err) => {
+                    println!("{}", style("Failed to fetch regions from API").red());
+                    println!("{}", style(format!("Error: {:?}", err)).red());
+                    return Err(anyhow::anyhow!("Failed to fetch regions from API: {}", err));
+                }
+            };
+
+            if regions_response.is_empty() {
+                println!("{}", style("No regions found. Using default region.").yellow());
+            } else {
+                println!(
+                    "{}",
+                    style(format!("Found {} regions", regions_response.len())).green()
+                );
+            }
+
+            // Create list of region names from API response
+            let mut regions: Vec<String> = regions_response
+                .iter()
+                .filter(|r| r.status == "active")
+                .map(|r| r.name.clone())
+                .collect();
+            regions.push("custom".to_string());
             let region_selection = Select::with_theme(&self.theme)
                 .with_prompt("Select primary region")
                 .items(&regions)

@@ -18,10 +18,12 @@ use tabled::Table;
 use tar::Builder;
 use tempfile::env::temp_dir;
 use tokio::{fs, task};
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DeployPermissions {
     max_file_count: u64,
 }
+
 impl PremiumUI {
     pub async fn deploy_interactive(&self) -> Result<()> {
         // Get project path
@@ -202,25 +204,17 @@ impl PremiumUI {
                 total_files += 1;
             }
         }
-        let max_file_count =
-            reqwest::get("http://100.120.68.15:8000/api/v1/deploy/permissions").await;
+        
+        // Use the API client for permissions check
+        let permissions_url = self.api_client.base_url.clone() + "/deploy/permissions";
+        let max_file_count = self.api_client.get::<DeployPermissions>("/deploy/permissions").await;
+        
         match max_file_count {
-            Ok(response) => match response.text().await {
-                Ok(json_str) => {
-                    let json: Result<DeployPermissions, _> = serde_json::from_str(&json_str);
-                    let permissions = json.unwrap_or_else(|_| {
-                        println!("{}", style(""));
-                        std::process::exit(0)
-                    });
-                    if total_files > permissions.max_file_count {
-                        let too_many_files: i64 =
-                            total_files as i64 - permissions.max_file_count as i64;
-                        println!("{}",style(format!("The server had denied your deployment request. Your project contains {} too many files. ({}/{})",too_many_files,total_files,permissions.max_file_count)).red());
-                        std::process::exit(0);
-                    }
-                }
-                Err(e) => {
-                    eprintln!("{}", style(format!("Deployment failed: {e}",)).red().bold());
+            Ok(permissions) => {
+                if total_files > permissions.max_file_count {
+                    let too_many_files: i64 =
+                        total_files as i64 - permissions.max_file_count as i64;
+                    println!("{}",style(format!("The server had denied your deployment request. Your project contains {} too many files. ({}/{})",too_many_files,total_files,permissions.max_file_count)).red());
                     std::process::exit(0);
                 }
             },
@@ -229,6 +223,7 @@ impl PremiumUI {
                 std::process::exit(0);
             }
         }
+        
         if total_files > 5000 {
             let path_str = format!("{}", project_path.display());
             let current_path_str = style(format!(
@@ -346,7 +341,6 @@ Are you sure you would like to deploy it? This make take significant amounts of 
         environment: &str,
         name: &str,
     ) -> Result<()> {
-        let client = reqwest::Client::new();
         let path = PathBuf::from(tarball_path);
         if !path.is_file() {
             return Err(anyhow!("Path is not a file"));
@@ -354,11 +348,9 @@ Are you sure you would like to deploy it? This make take significant amounts of 
         let uuid = uuid::Uuid::new_v4();
         let uuid_str = format!("u-{}", uuid.to_string());
 
-        let api_url = match environment {
-            // "Production" => "http://localhost:3030/upload".to_string(),
-            // "Staging" => "https://staging-api.example.com/v1/deploy".to_string(),
-            _ => format!("http://100.120.68.15:8000/api/v1/apps/{name}/releases/{uuid_str}/upload"),
-        };
+        // Use the base URL from the API client
+        let api_url = format!("{}/apps/{}/releases/{}/upload", 
+            self.api_client.base_url, name, uuid_str);
 
         let file_content = fs::read(tarball_path).await?;
 
@@ -374,9 +366,10 @@ Are you sure you would like to deploy it? This make take significant amounts of 
 
         let pb = self.create_progress_bar(100, "Uploading project");
 
-        let response = client
-            .post(api_url)
-            //.bearer_auth(&self.config.api_token)
+        // Use the API client's underlying client to send the request
+        let response = self.api_client.client
+            .post(&api_url)
+            .headers(self.api_client.headers.clone())
             .multipart(form)
             .send()
             .await?;
@@ -395,5 +388,22 @@ Are you sure you would like to deploy it? This make take significant amounts of 
 
         pb.finish_with_message("Upload completed successfully ✓");
         Ok(())
+    }
+    
+
+    async fn test_api_connection(&self) -> Result<()> {
+        let mut spinner = self.create_spinner("Testing API connection...");
+        
+        // Try to make a simple request to the API
+        match self.api_client.get::<serde_json::Value>("/health").await {
+            Ok(_) => {
+                spinner.stop_with_message("✅ Connection successful!".to_string());
+                Ok(())
+            },
+            Err(err) => {
+                spinner.stop_with_message(format!("❌ Connection failed: {}", err));
+                Err(err)
+            }
+        }
     }
 }

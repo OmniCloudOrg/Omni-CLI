@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use console::style;
 use dialoguer::{Confirm, Input, MultiSelect, Select};
 use indicatif::{ProgressBar, ProgressStyle};
+use libomni::types::db::v1 as types;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -162,7 +163,7 @@ impl PremiumUI {
 
             // Fetch regions from API
             println!("{}", style("Fetching available regions...").dim());
-            let regions_response = match self.api_client.get::<Vec<libomni::types::db::v1::Region>>("/regions").await {
+            let regions_response = match self.api_client.get::<Vec<types::region::Region>>("/regions").await {
                 Ok(response) => {
                     response
                 },
@@ -185,7 +186,7 @@ impl PremiumUI {
             // Create list of region names from API response
             let mut regions: Vec<String> = regions_response
                 .iter()
-                .filter(|r| r.status == "active")
+            //    .filter(|r| r.status == "active")
                 .map(|r| r.name.clone())
                 .collect();
             regions.push("custom".to_string());
